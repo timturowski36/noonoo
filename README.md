@@ -85,7 +85,7 @@ Bestimme selbst **wann** und **wie oft** deine Feeds laufen:
 ## 🖥️ So funktioniert's
 
 1. **Anmelden** – Erstelle deinen Account
-2. **Outputs verbinden** – Discord-Webhook, Bilderrahmen-API, ...
+2. **Outputs verbinden** – Discord-Webhook, Whatsapp, was auch immer ...
 3. **Pipelines bauen** – Drag & Drop deine Module zusammen
 4. **Scheduler einrichten** – Wann soll was laufen?
 5. **Zurücklehnen** – DatenLoader erledigt den Rest 😎
@@ -95,12 +95,10 @@ Bestimme selbst **wann** und **wie oft** deine Feeds laufen:
 ## 🏗️ Technologie
 
 - **Backend:** Kotlin
-- **Framework:** Ktor (geplant)
-- **Scheduling:** Kotlin Coroutines
-- **APIs:** Bundesliga API, RSS Parser, Discord Webhooks
+- **APIs:** Nur frei verfügbare Quellen aus dem Internet
 
 
 
 <p align="center">
-  <i>Made with ☕ und Liebe zur Bundesliga</i>
+  <i>Made with ☕ und Liebe zu Daten</i>
 </p>
