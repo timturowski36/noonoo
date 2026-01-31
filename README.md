@@ -1,6 +1,4 @@
-# FeedKrake
-
-# 🚀 DatenLoader
+# 🐙 FeedKrake
 
 > Dein persönlicher Feed-Aggregator mit modularem Baukasten-Prinzip
 
