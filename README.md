@@ -1,12 +1,12 @@
-🐙 Datenkrake
+# 🐙 FeedKrake
 Dein persönlicher Feed-Aggregator mit modularem Baukasten-Prinzip
 
-## 🎯 Was ist Datenkrake?
-Datenkrake ist eine App, mit der du dir deinen eigenen personalisierten Feed zusammenbauen kannst – ganz nach deinen Bedürfnissen.
+## 🎯 Was ist FeedKrake?
+FeedKrake ist eine App, mit der du dir deinen eigenen personalisierten Feed zusammenbauen kannst – ganz nach deinen Bedürfnissen.
 
 Stell dir vor: Jeden Morgen um 7 Uhr bekommst du automatisch die nächsten Spiele deines Lieblingsvereins auf Discord. Und auf deinem digitalen Bilderrahmen im Flur rotiert die aktuelle Bundesliga-Tabelle zusammen mit den neuesten Heise-News.
 
-Das ist Datenkrake. 📲
+Das ist FeedKrake. 📲
 
 ## 🧩 Das Konzept
 ```
@@ -71,7 +71,7 @@ Bestimme selbst wann und wie oft deine Feeds laufen:
 2. **Outputs verbinden** – Discord-Webhook, E-Mail, Bilderrahmen, ...
 3. **Pipelines bauen** – Drag & Drop deine Module zusammen
 4. **Scheduler einrichten** – Wann soll was laufen?
-5. **Zurücklehnen** – Datenkrake erledigt den Rest 😎
+5. **Zurücklehnen** – FeedKrake erledigt den Rest 😎
 
 ## 🏗️ Technologie
 
