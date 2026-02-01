@@ -1,4 +1,8 @@
 package sources.bundesliga.model
 
-class Spiel {
-}
+data class Spiel(
+    val datum: String,
+    val heimmannschaft: String,
+    val gastmannschaft: String,
+    val spieltag: Int
+)
