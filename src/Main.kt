@@ -1,14 +1,70 @@
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-fun main() {
-    val name = "Kotlin"
-    //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-    // to see how IntelliJ IDEA suggests fixing it.
-    println("Hello, " + name + "!")
+import sources.pubg.config.PubgConfigLoader
+import sources.`pubg-api`.api.PubgApiClient
 
-    for (i in 1..5) {
-        //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-        // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-        println("i = $i")
+fun main() {
+    println("═══════════════════════════════════════")
+    println("         🎮 FeedKrake - PUBG Stats")
+    println("═══════════════════════════════════════")
+    println()
+
+    // 1. API Key laden
+    val apiKey = PubgConfigLoader.loadApiKey()
+    if (apiKey == null) {
+        println("Programm beendet.")
+        return
     }
+
+    val client = PubgApiClient(apiKey)
+    val platform = "steam"
+    val playerName = "DeinePlayerName"  // <- Hier deinen Namen eintragen
+
+    // 2. Account-ID abrufen
+    println()
+    println("── Account-ID ──────────────────────────")
+    val accountId = client.fetchAccountId(playerName, platform)
+    if (accountId == null) {
+        println("Programm beendet.")
+        return
+    }
+
+    // 3. Lifetime Wins abrufen
+    println()
+    println("── Lifetime Stats ──────────────────────")
+    val lifetimeWins = client.fetchLifetimeWins(platform, accountId)
+    if (lifetimeWins != null) {
+        println("🏆 Gesamt-Wins: $lifetimeWins")
+    }
+
+    // 4. Letzte 12 Stunden Stats
+    println()
+    println("── Letzte 12 Stunden ───────────────────")
+    val stats12h = client.fetchRecentStats(platform, accountId, hours = 12)
+    if (stats12h != null) {
+        println("📊 ${stats12h.extendedSummary()}")
+    }
+
+    // 5. Wochenbericht (seit Montag 6 Uhr)
+    println()
+    println("── Wochenbericht ───────────────────────")
+    val hoursSinceMonday = calculateHoursSinceMonday()
+    val statsWeek = client.fetchRecentStats(platform, accountId, hours = hoursSinceMonday, maxMatches = 100)
+    if (statsWeek != null) {
+        println("📊 ${statsWeek.extendedSummary()}")
+    }
+
+    println()
+    println("═══════════════════════════════════════")
+    println("         ✅ Fertig!")
+    println("═══════════════════════════════════════")
+}
+
+fun calculateHoursSinceMonday(): Int {
+    val now = java.time.LocalDateTime.now(java.time.ZoneId.of("Europe/Berlin"))
+    val lastMonday = if (now.dayOfWeek == java.time.DayOfWeek.MONDAY && now.hour >= 6) {
+        now.toLocalDate()
+    } else {
+        now.toLocalDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    }
+    val weekStart = lastMonday.atTime(6, 0)
+    return java.time.temporal.ChronoUnit.HOURS.between(weekStart, now).toInt().coerceAtLeast(1)
 }
