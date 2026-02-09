@@ -17,7 +17,7 @@ data class PlayerStats(
     fun kdFormatted(): String =
         if (deaths > 0) "%.2f".format(kd) else kills.toString()
 
-    fun avgDamageFormatted(): String = "%.1f".format(avgDamage)
+    fun avgDamageFormatted(): String = "%.0f".format(avgDamage)
 
     fun summary(): String {
         val winsStr = if (wins == 0) "-" else wins.toString()
@@ -26,6 +26,6 @@ data class PlayerStats(
 
     fun extendedSummary(): String {
         val winsStr = if (wins == 0) "-" else wins.toString()
-        return "$matches Matches | $winsStr Wins | $kills Kills | K/D: ${kdFormatted()} | Avg Dmg: ${avgDamageFormatted()} | $assists Assists"
+        return "$matches Matches | $winsStr Wins | $kills Kills | $assists Assists | K/D: ${kdFormatted()} | Avg Dmg: ${avgDamageFormatted()}"
     }
 }
