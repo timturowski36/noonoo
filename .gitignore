@@ -9,6 +9,8 @@ out/
 input/api_key.txt
 input/discord_token.txt
 input/*_accountid.txt
+input/pubg_api_key.txt
+input/discord/
 *.env
 .env.*
 
