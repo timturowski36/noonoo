@@ -8,62 +8,64 @@ import sources.bundesliga.queries.TabelleQuery
 import sources.bundesliga.queries.TabelleQuerySettings
 import sources.bundesliga.queries.Top4TabellenQuerySettings
 import sources.bundesliga.queries.Top5TabellenQuery
+import sources.pubg.model.PubgSettings
+import sources.pubg.queries.AccountIdQuery
+import sources.pubg.queries.AccountIdQuerySettings
+import sources.pubg.queries.Last12hStatsQuery
+import sources.pubg.queries.Last12hStatsQuerySettings
+import sources.pubg.queries.TotalWinsQuery
+import sources.pubg.queries.TotalWinsQuerySettings
 
 suspend fun main() {
-    val bundesligaSettings = BundesligaSettings(
-        lieblingsverein = "Mainz",
-        liga = "bl1"
-    )
-    val bundesligaModule = BundesligaModule(bundesligaSettings)
 
-    // Nächste Spiele Query
-    val naechsteSpieleQuery = NaechsteSpieleQuery()
-    val querySettings = NaechsteSpieleQuerySettings(
-        anzahlSpiele = 3,
-        nurHeimspiele = false
-    )
-    val result = naechsteSpieleQuery.execute(
-        bundesligaModule.settings,
-        querySettings
+    val pubgSettings = PubgSettings(
+        playerName = "philip_nc",
+        platform = "psn",
+        apiKey = ""
     )
 
-    // Einzelne Liga Tabelle
-    val tabelleQuery = TabelleQuery()
-    val tabellenQuerySettings = TabelleQuerySettings(anzahlTeams = 18, nurLieblingsverein = false)
-    val bundesligaTabelle = tabelleQuery.execute(
-        bundesligaModule.settings,
-        tabellenQuerySettings
-    )
+    // Schritt 1: Account-ID auflösen (muss zuerst laufen)
+    val accountIdQuery = AccountIdQuery()
+    val accountIdResult = accountIdQuery.execute(pubgSettings, AccountIdQuerySettings())
 
-    // Top 5 Ligen Tabelle
-    val top5Query = Top5TabellenQuery()
-    val top5QuerySettings = Top4TabellenQuerySettings(anzahlTeamsProLiga = 100)
-    val top5Tabelle = top5Query.execute(
-        bundesligaModule.settings,
-        top5QuerySettings
-    )
+    if (accountIdResult is QueryResult.Success) {
+        val accountId = accountIdResult.data.accountId
 
-    val messenger = BundesligaDiscordRenderer()
+        // Schritt 2: Lifetime Wins
+        val winsQuery = TotalWinsQuery()
+        val winsResult = winsQuery.execute(
+            pubgSettings,
+            TotalWinsQuerySettings(accountId = accountId)
+        )
 
-    // Ausgabe Einzelliga
-    println("=== BUNDESLIGA TABELLE ===")
-    if (bundesligaTabelle is QueryResult.Success) {
-        println(messenger.createDiscordMessage(bundesligaTabelle.data))
-    }
+        // Schritt 3: Letzte 12h Stats
+        val statsQuery = Last12hStatsQuery()
+        val statsResult = statsQuery.execute(
+            pubgSettings,
+            Last12hStatsQuerySettings(accountId = accountId)
+        )
 
-    // Ausgabe Top 5 Ligen
-    println("\n=== TOP TEAMS ALLER LIGEN ===")
-    when (top5Tabelle) {
-        is QueryResult.Success -> println(messenger.createDiscordMessage(top5Tabelle.data))
-        is QueryResult.Error -> println("Fehler: ${top5Tabelle.message}")
-        is QueryResult.Loading -> println("Lädt...")
-    }
+        // ─── Ausgabe ────────────────────────────────────────────────────────
 
-    // Ausgabe Nächste Spiele
-    println("\n=== NÄCHSTE SPIELE ===")
-    when (result) {
-        is QueryResult.Success -> println("Spiele: ${result.data}")
-        is QueryResult.Error -> println("Fehler: ${result.message}")
-        is QueryResult.Loading -> println("Lädt...")
+        println("\n=== PUBG STATS ===")
+
+        when (winsResult) {
+            is QueryResult.Success -> println("🏆 Lifetime Wins: ${winsResult.data}")
+            is QueryResult.Error   -> println("❌ ${winsResult.message}")
+            is QueryResult.Loading -> println("⏳ Lädt...")
+        }
+
+        when (statsResult) {
+            is QueryResult.Success -> {
+                val s = statsResult.data
+                println("📊 Letzte 12h: ${s.matches} Matches | ${s.wins} Wins | ${s.kills} Kills | K/D: ${s.kdFormatted()}")
+                println("📝 Summary: ${s.summary()}")
+            }
+            is QueryResult.Error   -> println("❌ ${statsResult.message}")
+            is QueryResult.Loading -> println("⏳ Lädt...")
+        }
+
+    } else if (accountIdResult is QueryResult.Error) {
+        println("❌ PUBG: ${accountIdResult.message}")
     }
 }
