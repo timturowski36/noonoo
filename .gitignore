@@ -1,7 +1,5 @@
 # Build output
 out/
-build/
-target/
 
 # IDE
 .idea/
