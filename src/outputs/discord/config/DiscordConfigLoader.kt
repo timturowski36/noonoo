@@ -4,8 +4,8 @@ import java.io.File
 
 object DiscordConfigLoader {
 
-    private const val CONFIG_DIR = "input/discord"
-    private const val BOT_TOKEN_FILE = "$CONFIG_DIR/bot_token.txt"
+    private const val CONFIG_DIR = "outputs/discord/config"
+    private const val BOT_TOKEN_FILE = "$CONFIG_DIR/allgemein.txt"
 
     /**
      * Lädt den Bot-Token aus der Konfigurationsdatei

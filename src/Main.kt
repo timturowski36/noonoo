@@ -1,13 +1,5 @@
 import domain.model.QueryResult
-import outputs.discord.renderers.BundesligaDiscordRenderer
-import sources.bundesliga.BundesligaModule
-import sources.bundesliga.model.BundesligaSettings
-import sources.bundesliga.queries.NaechsteSpieleQuery
-import sources.bundesliga.queries.NaechsteSpieleQuerySettings
-import sources.bundesliga.queries.TabelleQuery
-import sources.bundesliga.queries.TabelleQuerySettings
-import sources.bundesliga.queries.Top4TabellenQuerySettings
-import sources.bundesliga.queries.Top5TabellenQuery
+import outputs.discord.DiscordBot
 import sources.pubg.model.PubgSettings
 import sources.pubg.queries.AccountIdQuery
 import sources.pubg.queries.AccountIdQuerySettings
