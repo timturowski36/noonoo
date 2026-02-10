@@ -1,4 +1,5 @@
 import domain.model.QueryResult
+import outputs.discord.DiscordBot
 import outputs.discord.renderers.BundesligaDiscordRenderer
 import sources.bundesliga.BundesligaModule
 import sources.bundesliga.model.BundesligaSettings
@@ -45,12 +46,18 @@ suspend fun main() {
             Last12hStatsQuerySettings(accountId = accountId)
         )
 
-        // ─── Ausgabe ────────────────────────────────────────────────────────
+        // ─── Konsolen-Ausgabe ──────────────────────────────────────────────
 
         println("\n=== PUBG STATS ===")
 
+        var lifetimeWins: Int? = null
+        var statsMessage: String? = null
+
         when (winsResult) {
-            is QueryResult.Success -> println("🏆 Lifetime Wins: ${winsResult.data}")
+            is QueryResult.Success -> {
+                lifetimeWins = winsResult.data
+                println("🏆 Lifetime Wins: $lifetimeWins")
+            }
             is QueryResult.Error   -> println("❌ ${winsResult.message}")
             is QueryResult.Loading -> println("⏳ Lädt...")
         }
@@ -58,11 +65,39 @@ suspend fun main() {
         when (statsResult) {
             is QueryResult.Success -> {
                 val s = statsResult.data
-                println("📊 Letzte 12h: ${s.matches} Matches | ${s.wins} Wins | ${s.kills} Kills | K/D: ${s.kdFormatted()}")
+                statsMessage = "${s.matches} Matches | ${s.wins} Wins | ${s.kills} Kills | K/D: ${s.kdFormatted()}"
+                println("📊 Letzte 12h: $statsMessage")
                 println("📝 Summary: ${s.summary()}")
             }
             is QueryResult.Error   -> println("❌ ${statsResult.message}")
             is QueryResult.Loading -> println("⏳ Lädt...")
+        }
+
+        // ─── Discord-Ausgabe ───────────────────────────────────────────────
+
+        println("\n=== DISCORD BOT ===")
+
+        val bot = DiscordBot.create()
+        if (bot != null) {
+            // Channels an die gesendet werden soll (Dateiname ohne .txt)
+            val channels = listOf("Allgemein", "Stats")
+
+            // Nachricht zusammenbauen
+            val discordMessage = buildString {
+                appendLine("🎮 **PUBG Stats Update**")
+                appendLine()
+                if (lifetimeWins != null) {
+                    appendLine("🏆 **Lifetime Wins:** $lifetimeWins")
+                }
+                if (statsMessage != null) {
+                    appendLine("📊 **Letzte 12h:** $statsMessage")
+                }
+            }
+
+            // An alle konfigurierten Channels senden
+            bot.sendMessageToChannels(channels, discordMessage)
+        } else {
+            println("⚠️ Discord Bot nicht konfiguriert - überspringe")
         }
 
     } else if (accountIdResult is QueryResult.Error) {

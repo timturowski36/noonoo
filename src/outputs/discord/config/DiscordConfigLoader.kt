@@ -5,7 +5,6 @@ import java.io.File
 object DiscordConfigLoader {
 
     private const val CONFIG_DIR = "input/discord"
-    private const val CHANNELS_DIR = "$CONFIG_DIR/channels"
     private const val BOT_TOKEN_FILE = "$CONFIG_DIR/bot_token.txt"
 
     /**
@@ -33,14 +32,14 @@ object DiscordConfigLoader {
 
     /**
      * Lädt die Channel-ID für einen bestimmten Channel-Namen
-     * Die Datei muss unter input/discord/channels/{channelName}.txt liegen
+     * Die Datei muss unter input/discord/{channelName}.txt liegen
      */
     fun loadChannelId(channelName: String): String? {
-        val file = File("$CHANNELS_DIR/$channelName.txt")
+        val file = File("$CONFIG_DIR/$channelName.txt")
 
         if (!file.exists()) {
             println("❌ Channel '$channelName' nicht gefunden!")
-            println("   Bitte erstelle: $CHANNELS_DIR/$channelName.txt")
+            println("   Bitte erstelle: $CONFIG_DIR/$channelName.txt")
             println("   Inhalt: Die Channel-ID (Rechtsklick auf Channel → ID kopieren)")
             return null
         }
@@ -56,17 +55,20 @@ object DiscordConfigLoader {
     }
 
     /**
-     * Lädt alle verfügbaren Channels aus dem Channels-Ordner
+     * Lädt alle verfügbaren Channels aus dem Config-Ordner
+     * (alle .txt Dateien außer bot_token.txt)
      */
     fun loadAllChannels(): Map<String, String> {
-        val channelsDir = File(CHANNELS_DIR)
-        if (!channelsDir.exists() || !channelsDir.isDirectory) {
-            println("❌ Channels-Ordner nicht gefunden: $CHANNELS_DIR")
+        val configDir = File(CONFIG_DIR)
+        if (!configDir.exists() || !configDir.isDirectory) {
+            println("❌ Config-Ordner nicht gefunden: $CONFIG_DIR")
             return emptyMap()
         }
 
         val channels = mutableMapOf<String, String>()
-        channelsDir.listFiles { file -> file.extension == "txt" }?.forEach { file ->
+        configDir.listFiles { file ->
+            file.extension == "txt" && file.name != "bot_token.txt"
+        }?.forEach { file ->
             val channelName = file.nameWithoutExtension
             val channelId = file.readText().trim()
             if (channelId.isNotEmpty()) {
