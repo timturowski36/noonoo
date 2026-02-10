@@ -130,11 +130,15 @@ class PubgApiClient(
             var matches = 0
             var kills = 0
             var deaths = 0
+            var damageDealt = 0.0
+            var assists = 0
 
             // Regexe einmal kompilieren, nicht pro Iteration neu erstellen
-            val createdAtRegex = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
+            val createdAtRegex  = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
             val killsRegex      = Regex(""""kills"\s*:\s*(\d+)""")
             val winPlaceRegex   = Regex(""""winPlace"\s*:\s*(\d+)""")
+            val damageRegex     = Regex(""""damageDealt"\s*:\s*([\d.]+)""")
+            val assistsRegex    = Regex(""""assists"\s*:\s*(\d+)""")
             val playerIdRegex   = Regex(""""playerId"\s*:\s*"${Regex.escape(accountId)}"""")
 
             // 2. Einzelne Matches durchgehen
@@ -163,12 +167,14 @@ class PubgApiClient(
 
                 matches++
                 kills += killsRegex.find(statsWindow)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                damageDealt += damageRegex.find(statsWindow)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                assists += assistsRegex.find(statsWindow)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 val winPlace = winPlaceRegex.find(statsWindow)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 if (winPlace == 1) wins++ else deaths++
             }
 
-            val result = PlayerStats(wins, matches, kills, deaths)
-            println("✅ ${hours}h: ${result.matches} Matches | ${result.wins} Wins | ${result.kills} Kills | K/D: ${result.kdFormatted()}")
+            val result = PlayerStats(wins, matches, kills, deaths, damageDealt, assists)
+            println("✅ ${hours}h: ${result.extendedSummary()}")
             result
 
         } catch (e: Exception) {

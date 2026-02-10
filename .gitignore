@@ -7,7 +7,6 @@ out/
 
 # Credentials (API Keys, Tokens)
 *.txt
-input/discord/
 *.env
 .env.*
 
