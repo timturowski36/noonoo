@@ -1,71 +1,70 @@
-import domain.model.QueryResult
-import outputs.discord.renderers.BundesligaDiscordRenderer
-import sources.bundesliga.BundesligaModule
-import sources.bundesliga.model.BundesligaSettings
-import sources.bundesliga.queries.NaechsteSpieleQuery
-import sources.bundesliga.queries.NaechsteSpieleQuerySettings
-import sources.bundesliga.queries.TabelleQuery
-import sources.bundesliga.queries.TabelleQuerySettings
-import sources.bundesliga.queries.Top4TabellenQuerySettings
-import sources.bundesliga.queries.Top5TabellenQuery
-import sources.pubg.model.PubgSettings
-import sources.pubg.queries.AccountIdQuery
-import sources.pubg.queries.AccountIdQuerySettings
-import sources.pubg.queries.Last12hStatsQuery
-import sources.pubg.queries.Last12hStatsQuerySettings
-import sources.pubg.queries.TotalWinsQuery
-import sources.pubg.queries.TotalWinsQuerySettings
+import sources.pubg.config.PubgConfigLoader
+import sources.`pubg-api`.api.PubgApiClient
 
-suspend fun main() {
+fun main() {
+    println("═══════════════════════════════════════")
+    println("         🎮 FeedKrake - PUBG Stats")
+    println("═══════════════════════════════════════")
+    println()
 
-    val pubgSettings = PubgSettings(
-        playerName = "philip_nc",
-        platform = "psn",
-        apiKey = ""
-    )
-
-    // Schritt 1: Account-ID auflösen (muss zuerst laufen)
-    val accountIdQuery = AccountIdQuery()
-    val accountIdResult = accountIdQuery.execute(pubgSettings, AccountIdQuerySettings())
-
-    if (accountIdResult is QueryResult.Success) {
-        val accountId = accountIdResult.data.accountId
-
-        // Schritt 2: Lifetime Wins
-        val winsQuery = TotalWinsQuery()
-        val winsResult = winsQuery.execute(
-            pubgSettings,
-            TotalWinsQuerySettings(accountId = accountId)
-        )
-
-        // Schritt 3: Letzte 12h Stats
-        val statsQuery = Last12hStatsQuery()
-        val statsResult = statsQuery.execute(
-            pubgSettings,
-            Last12hStatsQuerySettings(accountId = accountId)
-        )
-
-        // ─── Ausgabe ────────────────────────────────────────────────────────
-
-        println("\n=== PUBG STATS ===")
-
-        when (winsResult) {
-            is QueryResult.Success -> println("🏆 Lifetime Wins: ${winsResult.data}")
-            is QueryResult.Error   -> println("❌ ${winsResult.message}")
-            is QueryResult.Loading -> println("⏳ Lädt...")
-        }
-
-        when (statsResult) {
-            is QueryResult.Success -> {
-                val s = statsResult.data
-                println("📊 Letzte 12h: ${s.matches} Matches | ${s.wins} Wins | ${s.kills} Kills | K/D: ${s.kdFormatted()}")
-                println("📝 Summary: ${s.summary()}")
-            }
-            is QueryResult.Error   -> println("❌ ${statsResult.message}")
-            is QueryResult.Loading -> println("⏳ Lädt...")
-        }
-
-    } else if (accountIdResult is QueryResult.Error) {
-        println("❌ PUBG: ${accountIdResult.message}")
+    // 1. API Key laden
+    val apiKey = PubgConfigLoader.loadApiKey()
+    if (apiKey == null) {
+        println("Programm beendet.")
+        return
     }
+
+    val client = PubgApiClient(apiKey)
+    val platform = "steam"
+    val playerName = "philipnc"
+
+    // 2. Account-ID abrufen
+    println()
+    println("── Account-ID ──────────────────────────")
+    val accountId = client.fetchAccountId(playerName, platform)
+    if (accountId == null) {
+        println("Programm beendet.")
+        return
+    }
+
+    // 3. Lifetime Wins abrufen
+    println()
+    println("── Lifetime Stats ──────────────────────")
+    val lifetimeWins = client.fetchLifetimeWins(platform, accountId)
+    if (lifetimeWins != null) {
+        println("🏆 Gesamt-Wins: $lifetimeWins")
+    }
+
+    // 4. Letzte 12 Stunden Stats
+    println()
+    println("── Letzte 12 Stunden ───────────────────")
+    val stats12h = client.fetchRecentStats(platform, accountId, hours = 12)
+    if (stats12h != null) {
+        println("📊 ${stats12h.extendedSummary()}")
+    }
+
+    // 5. Wochenbericht (seit Montag 6 Uhr)
+    println()
+    println("── Wochenbericht ───────────────────────")
+    val hoursSinceMonday = calculateHoursSinceMonday()
+    val statsWeek = client.fetchRecentStats(platform, accountId, hours = hoursSinceMonday, maxMatches = 100)
+    if (statsWeek != null) {
+        println("📊 ${statsWeek.extendedSummary()}")
+    }
+
+    println()
+    println("═══════════════════════════════════════")
+    println("         ✅ Fertig!")
+    println("═══════════════════════════════════════")
+}
+
+fun calculateHoursSinceMonday(): Int {
+    val now = java.time.LocalDateTime.now(java.time.ZoneId.of("Europe/Berlin"))
+    val lastMonday = if (now.dayOfWeek == java.time.DayOfWeek.MONDAY && now.hour >= 6) {
+        now.toLocalDate()
+    } else {
+        now.toLocalDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    }
+    val weekStart = lastMonday.atTime(6, 0)
+    return java.time.temporal.ChronoUnit.HOURS.between(weekStart, now).toInt().coerceAtLeast(1)
 }
