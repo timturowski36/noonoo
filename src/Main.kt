@@ -3,10 +3,6 @@ import sources.pubg.config.PubgConfigLoader
 import sources.`pubg-api`.api.PubgApiClient
 
 fun main() {
-    println("═══════════════════════════════════════")
-    println("         🎮 FeedKrake - PUBG Stats")
-    println("═══════════════════════════════════════")
-    println()
 
     // 1. API Key laden
     val apiKey = PubgConfigLoader.loadApiKey()
