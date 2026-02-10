@@ -4,7 +4,7 @@ import java.io.File
 
 object DiscordConfigLoader {
 
-    private const val CONFIG_DIR = "outputs/discord/config"
+    private const val CONFIG_DIR = "src/outputs/discord/config"
     private const val BOT_TOKEN_FILE = "$CONFIG_DIR/allgemein.txt"
 
     /**
