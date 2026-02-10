@@ -6,9 +6,7 @@ out/
 *.iml
 
 # Credentials (API Keys, Tokens)
-input/api_key.txt
-input/discord_token.txt
-input/*_accountid.txt
+*.txt
 *.env
 .env.*
 
