@@ -16,7 +16,7 @@ fun main() {
 
     val client = PubgApiClient(apiKey)
     val platform = "steam"
-    val playerName = "DeinePlayerName"  // <- Hier deinen Namen eintragen
+    val playerName = "philipnc"
 
     // 2. Account-ID abrufen
     println()

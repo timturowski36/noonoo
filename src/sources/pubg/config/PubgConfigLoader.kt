@@ -4,7 +4,7 @@ import java.io.File
 
 object PubgConfigLoader {
 
-    private const val CONFIG_DIR = "input"
+    private const val CONFIG_DIR = "src/sources/pubg/config"
     private const val API_KEY_FILE = "pubg_api_key.txt"
 
     fun loadApiKey(): String? {
