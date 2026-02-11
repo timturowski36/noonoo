@@ -13,6 +13,10 @@ object DiscordConfigLoader {
     fun loadBotToken(): String? {
         val file = File(BOT_TOKEN_FILE)
 
+        // Debug: Zeige Working Directory
+        println("📂 Working Directory: ${System.getProperty("user.dir")}")
+        println("📂 Suche Bot Token in: ${file.absolutePath}")
+
         if (!file.exists()) {
             println("❌ Discord Bot Token nicht gefunden!")
             println("   Bitte erstelle: $BOT_TOKEN_FILE")
@@ -37,10 +41,13 @@ object DiscordConfigLoader {
     fun loadChannelId(channelName: String): String? {
         val file = File("$CONFIG_DIR/$channelName.txt")
 
+        println("📂 Suche Channel '$channelName' in: ${file.absolutePath}")
+
         if (!file.exists()) {
             println("❌ Channel '$channelName' nicht gefunden!")
             println("   Bitte erstelle: $CONFIG_DIR/$channelName.txt")
             println("   Inhalt: Die Channel-ID (Rechtsklick auf Channel → ID kopieren)")
+            listAvailableChannels()
             return null
         }
 
@@ -55,6 +62,25 @@ object DiscordConfigLoader {
     }
 
     /**
+     * Listet alle verfügbaren Channel-Dateien im Config-Ordner auf
+     */
+    private fun listAvailableChannels() {
+        val configDir = File(CONFIG_DIR)
+        if (configDir.exists() && configDir.isDirectory) {
+            val files = configDir.listFiles { file ->
+                file.extension == "txt" && file.name != "bot_token.txt"
+            }
+            if (files != null && files.isNotEmpty()) {
+                println("   Verfügbare Channels: ${files.map { it.nameWithoutExtension }.joinToString(", ")}")
+            } else {
+                println("   Keine Channel-Dateien gefunden in: ${configDir.absolutePath}")
+            }
+        } else {
+            println("   Config-Ordner existiert nicht: ${configDir.absolutePath}")
+        }
+    }
+
+    /**
      * Lädt alle verfügbaren Channels aus dem Config-Ordner
      * (alle .txt Dateien außer bot_token.txt)
      */
@@ -62,6 +88,7 @@ object DiscordConfigLoader {
         val configDir = File(CONFIG_DIR)
         if (!configDir.exists() || !configDir.isDirectory) {
             println("❌ Config-Ordner nicht gefunden: $CONFIG_DIR")
+            println("   Absoluter Pfad: ${configDir.absolutePath}")
             return emptyMap()
         }
 
