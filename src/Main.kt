@@ -1,66 +1,86 @@
+import domain.model.QueryResult
 import outputs.discord.DiscordBot
-import sources.pubg.config.PubgConfigLoader
-import sources.`pubg-api`.api.PubgApiClient
+import outputs.discord.renderers.BundesligaDiscordRenderer
+import sources.bundesliga.BundesligaModule
+import sources.bundesliga.model.BundesligaSettings
+import sources.bundesliga.queries.NaechsteSpieleQuery
+import sources.bundesliga.queries.NaechsteSpieleQuerySettings
+import sources.bundesliga.queries.TabelleQuery
+import sources.bundesliga.queries.TabelleQuerySettings
+import sources.bundesliga.queries.Top4TabellenQuerySettings
+import sources.bundesliga.queries.Top5TabellenQuery
+import sources.pubg.model.PubgSettings
+import sources.pubg.queries.AccountIdQuery
+import sources.pubg.queries.AccountIdQuerySettings
+import sources.pubg.queries.Last12hStatsQuery
+import sources.pubg.queries.Last12hStatsQuerySettings
+import sources.pubg.queries.TotalWinsQuery
+import sources.pubg.queries.TotalWinsQuerySettings
 
-fun main() {
+suspend fun main() {
 
-    // 1. API Key laden
-    val apiKey = PubgConfigLoader.loadApiKey()
-    if (apiKey == null) {
-        println("Programm beendet.")
-        return
-    }
+    val pubgSettings = PubgSettings(
+        playerName = "philip_nc",
+        platform = "psn",
+        apiKey = ""
+    )
 
-    val client = PubgApiClient(apiKey)
-    val platform = "steam"
-    val playerName = "brotrustgaming"
+    // Schritt 1: Account-ID auflösen (muss zuerst laufen)
+    val accountIdQuery = AccountIdQuery()
+    val accountIdResult = accountIdQuery.execute(pubgSettings, AccountIdQuerySettings())
 
-    // 2. Account-ID abrufen
-    println()
-    println("── Account-ID ──────────────────────────")
-    val accountId = client.fetchAccountId(playerName, platform)
-    if (accountId == null) {
-        println("Programm beendet.")
-        return
-    }
+    if (accountIdResult is QueryResult.Success) {
+        val accountId = accountIdResult.data.accountId
 
-    // 3. Lifetime Wins abrufen
-    println()
-    println("── Lifetime Stats ──────────────────────")
-    val lifetimeWins = client.fetchLifetimeWins(platform, accountId)
-    if (lifetimeWins != null) {
-        println("🏆 Gesamt-Wins: $lifetimeWins")
-    }
+        // Schritt 2: Lifetime Wins
+        val winsQuery = TotalWinsQuery()
+        val winsResult = winsQuery.execute(
+            pubgSettings,
+            TotalWinsQuerySettings(accountId = accountId)
+        )
 
-    // 4. Letzte 12 Stunden Stats
-    println()
-    println("── Letzte 12 Stunden ───────────────────")
-    val stats12h = client.fetchRecentStats(platform, accountId, hours = 12)
-    if (stats12h != null) {
-        println("📊 ${stats12h.extendedSummary()}")
-    }
+        // Schritt 3: Letzte 12h Stats
+        val statsQuery = Last12hStatsQuery()
+        val statsResult = statsQuery.execute(
+            pubgSettings,
+            Last12hStatsQuerySettings(accountId = accountId)
+        )
 
-    // 5. Wochenbericht (seit Montag 6 Uhr)
-    println()
-    println("── Wochenbericht ───────────────────────")
-    val hoursSinceMonday = calculateHoursSinceMonday()
-    val statsWeek = client.fetchRecentStats(platform, accountId, hours = hoursSinceMonday, maxMatches = 100)
-    if (statsWeek != null) {
-        println("📊 ${statsWeek.extendedSummary()}")
-    }
+        // ─── Konsolen-Ausgabe ──────────────────────────────────────────────
 
-    println()
-    println("═══════════════════════════════════════")
-    println("         ✅ Fertig!")
-    println("═══════════════════════════════════════")
+        println("\n=== PUBG STATS ===")
 
-    // ─── Discord-Ausgabe ───────────────────────────────────────────────
+        var lifetimeWins: Int? = null
+        var statsMessage: String? = null
 
-    println("\n=== DISCORD BOT ===")
+        when (winsResult) {
+            is QueryResult.Success -> {
+                lifetimeWins = winsResult.data
+                println("🏆 Lifetime Wins: $lifetimeWins")
+            }
+            is QueryResult.Error   -> println("❌ ${winsResult.message}")
+            is QueryResult.Loading -> println("⏳ Lädt...")
+        }
 
-    val bot = DiscordBot.create()
-    if (bot != null) {
+        when (statsResult) {
+            is QueryResult.Success -> {
+                val s = statsResult.data
+                statsMessage = "${s.matches} Matches | ${s.wins} Wins | ${s.kills} Kills | K/D: ${s.kdFormatted()}"
+                println("📊 Letzte 12h: $statsMessage")
+                println("📝 Summary: ${s.summary()}")
+            }
+            is QueryResult.Error   -> println("❌ ${statsResult.message}")
+            is QueryResult.Loading -> println("⏳ Lädt...")
+        }
+
+        // ─── Discord-Ausgabe ───────────────────────────────────────────────
+
+        println("\n=== DISCORD WEBHOOK ===")
+
+        val bot = DiscordBot.create()
+
         // Channels an die gesendet werden soll (Dateiname ohne .txt)
+        // z.B. "allgemein" → src/outputs/discord/config/allgemein.txt
         val channels = listOf("allgemein")
 
         // Nachricht zusammenbauen
@@ -70,25 +90,15 @@ fun main() {
             if (lifetimeWins != null) {
                 appendLine("🏆 **Lifetime Wins:** $lifetimeWins")
             }
-            if ("sdfasd" != null) {
-                appendLine("📊 **Letzte 12h:** ")
+            if (statsMessage != null) {
+                appendLine("📊 **Letzte 12h:** $statsMessage")
             }
         }
 
         // An alle konfigurierten Channels senden
         bot.sendMessageToChannels(channels, discordMessage)
-    } else {
-        println("⚠️ Discord Bot nicht konfiguriert - überspringe")
-    }
-}
 
-fun calculateHoursSinceMonday(): Int {
-    val now = java.time.LocalDateTime.now(java.time.ZoneId.of("Europe/Berlin"))
-    val lastMonday = if (now.dayOfWeek == java.time.DayOfWeek.MONDAY && now.hour >= 6) {
-        now.toLocalDate()
-    } else {
-        now.toLocalDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    } else if (accountIdResult is QueryResult.Error) {
+        println("❌ PUBG: ${accountIdResult.message}")
     }
-    val weekStart = lastMonday.atTime(6, 0)
-    return java.time.temporal.ChronoUnit.HOURS.between(weekStart, now).toInt().coerceAtLeast(1)
 }
