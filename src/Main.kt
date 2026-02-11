@@ -19,86 +19,42 @@ import sources.pubg.queries.TotalWinsQuerySettings
 
 suspend fun main() {
 
-    val pubgSettings = PubgSettings(
-        playerName = "philip_nc",
-        platform = "psn",
-        apiKey = ""
-    )
+    println("═══════════════════════════════════════")
+    println("       🎮 FeedKrake - Discord Test")
+    println("═══════════════════════════════════════")
 
-    // Schritt 1: Account-ID auflösen (muss zuerst laufen)
-    val accountIdQuery = AccountIdQuery()
-    val accountIdResult = accountIdQuery.execute(pubgSettings, AccountIdQuerySettings())
+    // ─── Discord Webhook Test ────────────────────────────────────────────
 
-    if (accountIdResult is QueryResult.Success) {
-        val accountId = accountIdResult.data.accountId
+    println("\n=== DISCORD WEBHOOK TEST ===")
 
-        // Schritt 2: Lifetime Wins
-        val winsQuery = TotalWinsQuery()
-        val winsResult = winsQuery.execute(
-            pubgSettings,
-            TotalWinsQuerySettings(accountId = accountId)
-        )
+    val bot = DiscordBot.create()
 
-        // Schritt 3: Letzte 12h Stats
-        val statsQuery = Last12hStatsQuery()
-        val statsResult = statsQuery.execute(
-            pubgSettings,
-            Last12hStatsQuerySettings(accountId = accountId)
-        )
+    // Channel-Name = Dateiname ohne .txt
+    // allgemein → src/outputs/discord/config/allgemein.txt
+    val channel = "allgemein"
 
-        // ─── Konsolen-Ausgabe ──────────────────────────────────────────────
-
-        println("\n=== PUBG STATS ===")
-
-        var lifetimeWins: Int? = null
-        var statsMessage: String? = null
-
-        when (winsResult) {
-            is QueryResult.Success -> {
-                lifetimeWins = winsResult.data
-                println("🏆 Lifetime Wins: $lifetimeWins")
-            }
-            is QueryResult.Error   -> println("❌ ${winsResult.message}")
-            is QueryResult.Loading -> println("⏳ Lädt...")
-        }
-
-        when (statsResult) {
-            is QueryResult.Success -> {
-                val s = statsResult.data
-                statsMessage = "${s.matches} Matches | ${s.wins} Wins | ${s.kills} Kills | K/D: ${s.kdFormatted()}"
-                println("📊 Letzte 12h: $statsMessage")
-                println("📝 Summary: ${s.summary()}")
-            }
-            is QueryResult.Error   -> println("❌ ${statsResult.message}")
-            is QueryResult.Loading -> println("⏳ Lädt...")
-        }
-
-        // ─── Discord-Ausgabe ───────────────────────────────────────────────
-
-        println("\n=== DISCORD WEBHOOK ===")
-
-        val bot = DiscordBot.create()
-
-        // Channels an die gesendet werden soll (Dateiname ohne .txt)
-        // z.B. "allgemein" → src/outputs/discord/config/allgemein.txt
-        val channels = listOf("allgemein")
-
-        // Nachricht zusammenbauen
-        val discordMessage = buildString {
-            appendLine("🎮 **PUBG Stats Update**")
-            appendLine()
-            if (lifetimeWins != null) {
-                appendLine("🏆 **Lifetime Wins:** $lifetimeWins")
-            }
-            if (statsMessage != null) {
-                appendLine("📊 **Letzte 12h:** $statsMessage")
-            }
-        }
-
-        // An alle konfigurierten Channels senden
-        bot.sendMessageToChannels(channels, discordMessage)
-
-    } else if (accountIdResult is QueryResult.Error) {
-        println("❌ PUBG: ${accountIdResult.message}")
+    // Test-Nachricht
+    val testMessage = buildString {
+        appendLine("🎮 **PUBG Stats Update** - Test")
+        appendLine()
+        appendLine("👤 **Spieler:** brotrustgaming")
+        appendLine("🖥️ **Plattform:** Steam")
+        appendLine()
+        appendLine("🏆 **Lifetime Wins:** 42")
+        appendLine("📊 **Letzte 12h:** 5 Matches | 2 Wins | 15 Kills | K/D: 3.75")
+        appendLine()
+        appendLine("✅ *Dies ist eine Testnachricht von FeedKrake*")
     }
+
+    println("📤 Sende Testnachricht an '$channel'...")
+    val success = bot.sendMessageToChannel(channel, testMessage)
+
+    if (success) {
+        println("✅ Test erfolgreich! Nachricht wurde an Discord gesendet.")
+    } else {
+        println("❌ Test fehlgeschlagen. Prüfe die Webhook-URL in allgemein.txt")
+    }
+
+    println()
+    println("═══════════════════════════════════════")
 }
