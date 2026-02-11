@@ -4,106 +4,81 @@ import java.io.File
 
 object DiscordConfigLoader {
 
-    private const val CONFIG_DIR = "input/discord"
-    private const val BOT_TOKEN_FILE = "$CONFIG_DIR/bot_token.txt"
+    // Config-Verzeichnis liegt im selben Ordner wie diese Klasse
+    private const val CONFIG_DIR = "src/outputs/discord/config"
 
     /**
-     * Lädt den Bot-Token aus der Konfigurationsdatei
+     * Lädt die Webhook-URL für einen bestimmten Channel-Namen
+     * Die Datei muss unter src/outputs/discord/config/{channelName}.txt liegen
      */
-    fun loadBotToken(): String? {
-        val file = File(BOT_TOKEN_FILE)
-
-        // Debug: Zeige Working Directory
-        println("📂 Working Directory: ${System.getProperty("user.dir")}")
-        println("📂 Suche Bot Token in: ${file.absolutePath}")
-
-        if (!file.exists()) {
-            println("❌ Discord Bot Token nicht gefunden!")
-            println("   Bitte erstelle: $BOT_TOKEN_FILE")
-            println("   Inhalt: Dein Discord Bot Token")
-            return null
-        }
-
-        val token = file.readText().trim()
-        if (token.isEmpty()) {
-            println("❌ Discord Bot Token Datei ist leer!")
-            return null
-        }
-
-        println("✅ Discord Bot Token geladen")
-        return token
-    }
-
-    /**
-     * Lädt die Channel-ID für einen bestimmten Channel-Namen
-     * Die Datei muss unter input/discord/{channelName}.txt liegen
-     */
-    fun loadChannelId(channelName: String): String? {
+    fun loadWebhookUrl(channelName: String): String? {
         val file = File("$CONFIG_DIR/$channelName.txt")
 
-        println("📂 Suche Channel '$channelName' in: ${file.absolutePath}")
+        println("📂 Suche Webhook '$channelName' in: ${file.absolutePath}")
 
         if (!file.exists()) {
-            println("❌ Channel '$channelName' nicht gefunden!")
+            println("❌ Webhook '$channelName' nicht gefunden!")
             println("   Bitte erstelle: $CONFIG_DIR/$channelName.txt")
-            println("   Inhalt: Die Channel-ID (Rechtsklick auf Channel → ID kopieren)")
-            listAvailableChannels()
+            println("   Inhalt: Die Webhook-URL (Server Settings → Integrations → Webhooks)")
+            listAvailableWebhooks()
             return null
         }
 
-        val channelId = file.readText().trim()
-        if (channelId.isEmpty()) {
-            println("❌ Channel-Datei '$channelName.txt' ist leer!")
+        val webhookUrl = file.readText().trim()
+        if (webhookUrl.isEmpty()) {
+            println("❌ Webhook-Datei '$channelName.txt' ist leer!")
             return null
         }
 
-        println("✅ Channel '$channelName' geladen: $channelId")
-        return channelId
+        if (!webhookUrl.startsWith("https://discord.com/api/webhooks/")) {
+            println("⚠️ Ungültige Webhook-URL in '$channelName.txt'")
+            println("   URL muss mit 'https://discord.com/api/webhooks/' beginnen")
+            return null
+        }
+
+        println("✅ Webhook '$channelName' geladen")
+        return webhookUrl
     }
 
     /**
-     * Listet alle verfügbaren Channel-Dateien im Config-Ordner auf
+     * Listet alle verfügbaren Webhook-Dateien im Config-Ordner auf
      */
-    private fun listAvailableChannels() {
+    private fun listAvailableWebhooks() {
         val configDir = File(CONFIG_DIR)
         if (configDir.exists() && configDir.isDirectory) {
             val files = configDir.listFiles { file ->
-                file.extension == "txt" && file.name != "bot_token.txt"
+                file.extension == "txt"
             }
             if (files != null && files.isNotEmpty()) {
-                println("   Verfügbare Channels: ${files.map { it.nameWithoutExtension }.joinToString(", ")}")
+                println("   Verfügbare Webhooks: ${files.map { it.nameWithoutExtension }.joinToString(", ")}")
             } else {
-                println("   Keine Channel-Dateien gefunden in: ${configDir.absolutePath}")
+                println("   Keine Webhook-Dateien gefunden in: ${configDir.absolutePath}")
             }
-        } else {
-            println("   Config-Ordner existiert nicht: ${configDir.absolutePath}")
         }
     }
 
     /**
-     * Lädt alle verfügbaren Channels aus dem Config-Ordner
-     * (alle .txt Dateien außer bot_token.txt)
+     * Lädt alle verfügbaren Webhooks aus dem Config-Ordner
      */
-    fun loadAllChannels(): Map<String, String> {
+    fun loadAllWebhooks(): Map<String, String> {
         val configDir = File(CONFIG_DIR)
         if (!configDir.exists() || !configDir.isDirectory) {
-            println("❌ Config-Ordner nicht gefunden: $CONFIG_DIR")
-            println("   Absoluter Pfad: ${configDir.absolutePath}")
+            println("❌ Config-Ordner nicht gefunden: ${configDir.absolutePath}")
             return emptyMap()
         }
 
-        val channels = mutableMapOf<String, String>()
+        val webhooks = mutableMapOf<String, String>()
         configDir.listFiles { file ->
-            file.extension == "txt" && file.name != "bot_token.txt"
+            file.extension == "txt"
         }?.forEach { file ->
             val channelName = file.nameWithoutExtension
-            val channelId = file.readText().trim()
-            if (channelId.isNotEmpty()) {
-                channels[channelName] = channelId
+            val webhookUrl = file.readText().trim()
+            if (webhookUrl.startsWith("https://discord.com/api/webhooks/")) {
+                webhooks[channelName] = webhookUrl
             }
         }
 
-        println("✅ ${channels.size} Channels geladen: ${channels.keys.joinToString(", ")}")
-        return channels
+        println("✅ ${webhooks.size} Webhooks geladen: ${webhooks.keys.joinToString(", ")}")
+        return webhooks
     }
 }

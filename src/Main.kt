@@ -75,30 +75,28 @@ suspend fun main() {
 
         // ─── Discord-Ausgabe ───────────────────────────────────────────────
 
-        println("\n=== DISCORD BOT ===")
+        println("\n=== DISCORD WEBHOOK ===")
 
         val bot = DiscordBot.create()
-        if (bot != null) {
-            // Channels an die gesendet werden soll (Dateiname ohne .txt)
-            val channels = listOf("Allgemein", "Stats")
 
-            // Nachricht zusammenbauen
-            val discordMessage = buildString {
-                appendLine("🎮 **PUBG Stats Update**")
-                appendLine()
-                if (lifetimeWins != null) {
-                    appendLine("🏆 **Lifetime Wins:** $lifetimeWins")
-                }
-                if (statsMessage != null) {
-                    appendLine("📊 **Letzte 12h:** $statsMessage")
-                }
+        // Channels an die gesendet werden soll (Dateiname ohne .txt)
+        // z.B. "allgemein" → src/outputs/discord/config/allgemein.txt
+        val channels = listOf("allgemein")
+
+        // Nachricht zusammenbauen
+        val discordMessage = buildString {
+            appendLine("🎮 **PUBG Stats Update**")
+            appendLine()
+            if (lifetimeWins != null) {
+                appendLine("🏆 **Lifetime Wins:** $lifetimeWins")
             }
-
-            // An alle konfigurierten Channels senden
-            bot.sendMessageToChannels(channels, discordMessage)
-        } else {
-            println("⚠️ Discord Bot nicht konfiguriert - überspringe")
+            if (statsMessage != null) {
+                appendLine("📊 **Letzte 12h:** $statsMessage")
+            }
         }
+
+        // An alle konfigurierten Channels senden
+        bot.sendMessageToChannels(channels, discordMessage)
 
     } else if (accountIdResult is QueryResult.Error) {
         println("❌ PUBG: ${accountIdResult.message}")

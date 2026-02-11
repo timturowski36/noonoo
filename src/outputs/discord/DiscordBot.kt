@@ -6,22 +6,21 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
-class DiscordBot(
-    private val botToken: String
-) {
+/**
+ * Discord Webhook Client - sendet Nachrichten über Discord Webhooks
+ */
+class DiscordBot {
     private val httpClient = HttpClient.newHttpClient()
-    private val baseUrl = "https://discord.com/api/v10"
 
     /**
-     * Sendet eine Nachricht an einen Channel (per Channel-ID)
+     * Sendet eine Nachricht an eine Webhook-URL
      */
-    fun sendMessage(channelId: String, message: String): Boolean {
+    fun sendToWebhook(webhookUrl: String, message: String): Boolean {
         return try {
             val jsonBody = """{"content": "${escapeJson(message)}"}"""
 
             val request = HttpRequest.newBuilder()
-                .uri(URI.create("$baseUrl/channels/$channelId/messages"))
-                .header("Authorization", "Bot $botToken")
+                .uri(URI.create(webhookUrl))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build()
@@ -29,7 +28,7 @@ class DiscordBot(
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
 
             if (response.statusCode() in 200..299) {
-                println("✅ Nachricht gesendet an Channel $channelId")
+                println("✅ Nachricht gesendet!")
                 true
             } else {
                 println("❌ Fehler beim Senden: HTTP ${response.statusCode()}")
@@ -44,15 +43,15 @@ class DiscordBot(
 
     /**
      * Sendet eine Nachricht an einen Channel (per Channel-Name)
-     * Lädt die Channel-ID automatisch aus der Konfiguration
+     * Lädt die Webhook-URL automatisch aus der Konfiguration
      */
     fun sendMessageToChannel(channelName: String, message: String): Boolean {
-        val channelId = DiscordConfigLoader.loadChannelId(channelName)
-        if (channelId == null) {
-            println("❌ Konnte Nachricht nicht senden - Channel '$channelName' nicht konfiguriert")
+        val webhookUrl = DiscordConfigLoader.loadWebhookUrl(channelName)
+        if (webhookUrl == null) {
+            println("❌ Konnte Nachricht nicht senden - Webhook '$channelName' nicht konfiguriert")
             return false
         }
-        return sendMessage(channelId, message)
+        return sendToWebhook(webhookUrl, message)
     }
 
     /**
@@ -75,11 +74,10 @@ class DiscordBot(
 
     companion object {
         /**
-         * Erstellt einen DiscordBot mit Token aus der Konfiguration
+         * Erstellt einen DiscordBot (kein Token nötig für Webhooks)
          */
-        fun create(): DiscordBot? {
-            val token = DiscordConfigLoader.loadBotToken() ?: return null
-            return DiscordBot(token)
+        fun create(): DiscordBot {
+            return DiscordBot()
         }
     }
 }
