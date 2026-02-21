@@ -52,10 +52,14 @@ fun main() {
             val message = buildString {
                 appendLine("🎮 Player: $playerName (Steam)")
                 appendLine()
-                appendLine(stats12h?.discordFormat("📊 Tagesstatistik:") ?: "📊 Tagesstatistik:\nKeine Matches in den letzten 12h")
+                appendLine(stats12h?.basicFormat("📊 Tagesstatistik:") ?: "📊 Tagesstatistik:\nKeine Matches in den letzten 12h")
                 appendLine()
-                appendLine(statsWeek?.discordFormat("📅 Wochenstatistik:") ?: "📅 Wochenstatistik:\nKeine Matches diese Woche")
+                appendLine(statsWeek?.basicFormat("📅 Wochenstatistik:") ?: "📅 Wochenstatistik:\nKeine Matches diese Woche")
                 appendLine()
+                if (statsWeek != null) {
+                    appendLine(statsWeek.weeklyExtras())
+                    appendLine()
+                }
                 append("🕐 Stand: $timestamp")
             }
 

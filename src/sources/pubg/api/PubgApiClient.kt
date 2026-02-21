@@ -155,6 +155,8 @@ class PubgApiClient(
             var longestKill = 0.0
             var headshotKills = 0
             var topTens = 0
+            var revives = 0
+            var knockdowns = 0
 
             val createdAtRegex    = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
             val playerIdRegex     = Regex(""""playerId"\s*:\s*"${Regex.escape(accountId)}"""")
@@ -166,6 +168,8 @@ class PubgApiClient(
             val assistsRegex      = Regex(""""assists"\s*:\s*(\d+)""")
             val longestKillRegex  = Regex(""""longestKill"\s*:\s*([\d.]+)""")
             val headshotRegex     = Regex(""""headshotKills"\s*:\s*(\d+)""")
+            val revivesRegex      = Regex(""""revives"\s*:\s*(\d+)""")
+            val knockdownsRegex   = Regex(""""DBNOs"\s*:\s*(\d+)""")
 
             // 2. Einzelne Matches mit Rate-Limiting durchgehen
             for ((index, matchId) in matchIds.withIndex()) {
@@ -200,6 +204,8 @@ class PubgApiClient(
                 assists       += assistsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 damageDealt   += damageRegex.find(participantBlock)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
                 headshotKills += headshotRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                revives       += revivesRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                knockdowns    += knockdownsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 val matchLongestKill = longestKillRegex.find(participantBlock)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
                 if (matchLongestKill > longestKill) longestKill = matchLongestKill
                 val winPlace = winPlaceRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
@@ -207,7 +213,7 @@ class PubgApiClient(
                 if (winPlace <= 10) topTens++
             }
 
-            val result = PlayerStats(wins, matches, kills, deaths, damageDealt, assists, longestKill, headshotKills, topTens)
+            val result = PlayerStats(wins, matches, kills, deaths, damageDealt, assists, longestKill, headshotKills, topTens, revives, knockdowns)
             println("✅ ${hours}h: ${result.extendedSummary()}")
             result
 

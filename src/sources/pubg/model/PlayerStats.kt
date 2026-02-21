@@ -9,7 +9,9 @@ data class PlayerStats(
     val assists: Int = 0,
     val longestKill: Double = 0.0,
     val headshotKills: Int = 0,
-    val topTens: Int = 0
+    val topTens: Int = 0,
+    val revives: Int = 0,
+    val knockdowns: Int = 0
 ) {
     val kd: Double
         get() = if (deaths > 0) kills.toDouble() / deaths else kills.toDouble()
@@ -28,13 +30,21 @@ data class PlayerStats(
 
     fun avgDamageFormatted(): String = "%.0f".format(avgDamage)
 
-    fun discordFormat(label: String): String {
+    fun basicFormat(label: String): String {
         val winsStr = if (wins == 0) "-" else "$wins"
         return buildString {
             appendLine(label)
-            appendLine("Matches: $matches   Wins: $winsStr   K/D: ${kdFormatted()}")
-            appendLine("Kills: $kills   Assists: $assists   Ø Schaden: ${avgDamageFormatted()}")
-            append("Weitester Kill: ${"%.0f".format(longestKill)}m   Headshots: $headshotKills (${"%.0f".format(headshotRate)}%)   Top 10: $topTens (${"%.0f".format(topTenRate)}%)")
+            append("Matches: $matches   Wins: $winsStr   K/D: ${kdFormatted()}   Kills: $kills   Assists: $assists   Ø Schaden: ${avgDamageFormatted()}")
+        }
+    }
+
+    fun weeklyExtras(): String {
+        return buildString {
+            appendLine("Weitester Kill: ${"%.0f".format(longestKill)}m")
+            appendLine("Headshots: $headshotKills (${"%.0f".format(headshotRate)}%)")
+            appendLine("Revives: $revives")
+            appendLine("Knockdowns: $knockdowns")
+            append("Top 10: $topTens (${"%.0f".format(topTenRate)}%)")
         }
     }
 
