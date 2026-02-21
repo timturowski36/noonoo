@@ -56,13 +56,16 @@ class PubgApiClient(
             }
 
             val body = response.body()
-            if (body.contains("\"data\":[]")) {
+
+            // Leeres data-Array am Anfang = Spieler nicht gefunden
+            if (body.trimStart().startsWith("{\"data\":[]}")) {
                 println("❌ Spieler '$playerName' nicht gefunden.")
                 return null
             }
 
+            // Erstes "id" nach "data" mit "account." Prefix ist die Account-ID
             val accountId = Regex(""""id"\s*:\s*"(account\.[^"]+)"""")
-                .find(body)
+                .find(body.substringAfter("\"data\""))
                 ?.groupValues?.get(1)
 
             if (accountId != null) {
