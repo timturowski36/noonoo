@@ -1,6 +1,7 @@
 package sources.`pubg-api`.api
 
 import sources.pubg.model.PlayerStats
+import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -13,6 +14,9 @@ class PubgApiClient(
 ) {
     private val httpClient = HttpClient.newHttpClient()
 
+    // Millisekunden zwischen Match-Requests (6s = max 10 Requests/Min)
+    private val requestDelayMs = 6_000L
+
     private fun buildRequest(url: String): HttpRequest =
         HttpRequest.newBuilder()
             .uri(URI.create(url))
@@ -21,18 +25,30 @@ class PubgApiClient(
             .GET()
             .build()
 
+    private fun rateLimitedSend(url: String): HttpResponse<String> {
+        Thread.sleep(requestDelayMs)
+        return httpClient.send(buildRequest(url), HttpResponse.BodyHandlers.ofString())
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
-    // Account-ID anhand des Spielernamens abrufen
+    // Account-ID anhand des Spielernamens abrufen (mit File-Cache)
     // ─────────────────────────────────────────────────────────────────────────
 
     fun fetchAccountId(playerName: String, platform: String): String? {
+        // Cache-Datei prüfen
+        val cacheFile = File("src/sources/pubg/config/${playerName}_accountid.txt")
+        if (cacheFile.exists()) {
+            val cached = cacheFile.readText().trim()
+            if (cached.isNotEmpty()) {
+                println("✅ Account-ID aus Cache: $cached")
+                return cached
+            }
+        }
+
         return try {
             println("🌐 Lade Account-ID für '$playerName' auf $platform...")
             val url = "$baseUrl/shards/$platform/players?filter[playerNames]=$playerName"
             val response = httpClient.send(buildRequest(url), HttpResponse.BodyHandlers.ofString())
-
-            println("🔍 Status: ${response.statusCode()}")
-            println("🔍 Body: ${response.body()}")
 
             if (response.statusCode() != 200) {
                 println("❌ HTTP ${response.statusCode()}")
@@ -40,20 +56,23 @@ class PubgApiClient(
             }
 
             val body = response.body()
-
-            // Leeres data-Array → Spieler nicht gefunden
-            if (body.trimStart().startsWith("{\"data\":[]}")) {
-                println("❌ Keine Daten gefunden für '$playerName'. Prüfe den Namen.")
+            if (body.contains("\"data\":[]")) {
+                println("❌ Spieler '$playerName' nicht gefunden.")
                 return null
             }
 
-            // Erstes "id" nach "data" ist die Account-ID
-            val accountId = Regex(""""id"\s*:\s*"([^"]+)"""")
-                .find(body.substringAfter("\"data\""))
+            val accountId = Regex(""""id"\s*:\s*"(account\.[^"]+)"""")
+                .find(body)
                 ?.groupValues?.get(1)
 
-            if (accountId != null) println("✅ Account-ID: $accountId")
-            else println("❌ Account-ID nicht im Response gefunden")
+            if (accountId != null) {
+                // In Cache speichern
+                cacheFile.parentFile.mkdirs()
+                cacheFile.writeText(accountId)
+                println("✅ Account-ID: $accountId (gespeichert)")
+            } else {
+                println("❌ Account-ID nicht im Response gefunden")
+            }
             accountId
 
         } catch (e: Exception) {
@@ -77,7 +96,6 @@ class PubgApiClient(
                 return null
             }
 
-            // Nach "gameModeStats" kommt ein "wins"-Feld pro Game Mode → alle summieren
             val gameModesSection = response.body().substringAfter("\"gameModeStats\"")
             val totalWins = Regex(""""wins"\s*:\s*(\d+)""")
                 .findAll(gameModesSection)
@@ -103,9 +121,9 @@ class PubgApiClient(
         maxMatches: Int = 30
     ): PlayerStats? {
         return try {
-            println("🌐 Lade Spielerdaten für $accountId...")
+            println("🌐 Lade Match-Liste für $accountId...")
 
-            // 1. Spieler-Endpoint → Match-ID-Liste
+            // 1. Spieler-Endpoint → Match-ID-Liste (kein Rate-Limit-Delay nötig hier)
             val playerResponse = httpClient.send(
                 buildRequest("$baseUrl/shards/$platform/players/$accountId"),
                 HttpResponse.BodyHandlers.ofString()
@@ -115,7 +133,6 @@ class PubgApiClient(
                 return null
             }
 
-            // Alle "id"-Felder nach "matches" sind Match-UUIDs
             val matchesSection = playerResponse.body().substringAfter("\"matches\"")
             val matchIds = Regex(""""id"\s*:\s*"([^"]+)"""")
                 .findAll(matchesSection)
@@ -133,43 +150,48 @@ class PubgApiClient(
             var damageDealt = 0.0
             var assists = 0
 
-            // Regexe einmal kompilieren, nicht pro Iteration neu erstellen
-            val createdAtRegex  = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
-            val killsRegex      = Regex(""""kills"\s*:\s*(\d+)""")
-            val winPlaceRegex   = Regex(""""winPlace"\s*:\s*(\d+)""")
-            val damageRegex     = Regex(""""damageDealt"\s*:\s*([\d.]+)""")
-            val assistsRegex    = Regex(""""assists"\s*:\s*(\d+)""")
-            val playerIdRegex   = Regex(""""playerId"\s*:\s*"${Regex.escape(accountId)}"""")
+            val createdAtRegex = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
+            val playerIdRegex  = Regex(""""playerId"\s*:\s*"${Regex.escape(accountId)}"""")
 
-            // 2. Einzelne Matches durchgehen
-            for (matchId in matchIds) {
-                val matchResponse = httpClient.send(
-                    buildRequest("$baseUrl/shards/$platform/matches/$matchId"),
-                    HttpResponse.BodyHandlers.ofString()
-                )
+            // Regexe für Stats-Felder
+            val killsRegex    = Regex(""""kills"\s*:\s*(\d+)""")
+            val winPlaceRegex = Regex(""""winPlace"\s*:\s*(\d+)""")
+            val damageRegex   = Regex(""""damageDealt"\s*:\s*([\d.]+)""")
+            val assistsRegex  = Regex(""""assists"\s*:\s*(\d+)""")
+
+            // 2. Einzelne Matches mit Rate-Limiting durchgehen
+            for ((index, matchId) in matchIds.withIndex()) {
+                println("   Match ${index + 1}/${matchIds.size}: $matchId")
+
+                val matchResponse = rateLimitedSend("$baseUrl/shards/$platform/matches/$matchId")
                 if (matchResponse.statusCode() != 200) continue
 
                 val matchBody = matchResponse.body()
 
-                // Zeitstempel → außerhalb des Zeitfensters überspringen
+                // Zeitstempel prüfen
                 val createdAt = createdAtRegex.find(matchBody)?.groupValues?.get(1) ?: continue
-                if (Instant.parse(createdAt) < cutoff) continue
+                if (Instant.parse(createdAt) < cutoff) {
+                    println("   ⏭️ Match zu alt, überspringe restliche Matches")
+                    break  // Matches sind chronologisch → ältere überspringen
+                }
 
-                // 3. Unseren Spieler im "included"-Abschnitt finden
+                // Kompletten Participant-Block des Spielers extrahieren
                 val includedSection = matchBody.substringAfter("\"included\"")
-                val playerMatch = playerIdRegex.find(includedSection) ?: continue
+                val playerIdPos = playerIdRegex.find(includedSection)?.range?.first ?: continue
 
-                // kills & winPlace sind im selben stats-Objekt wie playerId
-                // → Fenster um unseren Spieler nehmen und dort suchen
-                val windowStart = maxOf(0, playerMatch.range.first - 500)
-                val windowEnd   = minOf(includedSection.length, playerMatch.range.last + 500)
-                val statsWindow = includedSection.substring(windowStart, windowEnd)
+                // Suche den Anfang des Participant-Blocks (rückwärts von playerId)
+                val blockStart = includedSection.lastIndexOf("{\"type\":\"participant\"", playerIdPos)
+                    .takeIf { it >= 0 } ?: maxOf(0, playerIdPos - 3000)
+
+                // Suche das Ende des Participant-Blocks (vorwärts von playerId)
+                val blockEnd = minOf(includedSection.length, playerIdPos + 2000)
+                val participantBlock = includedSection.substring(blockStart, blockEnd)
 
                 matches++
-                kills += killsRegex.find(statsWindow)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                damageDealt += damageRegex.find(statsWindow)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
-                assists += assistsRegex.find(statsWindow)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                val winPlace = winPlaceRegex.find(statsWindow)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                kills    += killsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                assists  += assistsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                damageDealt += damageRegex.find(participantBlock)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                val winPlace = winPlaceRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 if (winPlace == 1) wins++ else deaths++
             }
 
