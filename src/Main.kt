@@ -50,15 +50,13 @@ fun main() {
             println("Wochen Stats: ${statsWeek?.extendedSummary() ?: "null"}")
 
             val message = buildString {
-                appendLine("🎮 **PUBG Stats – $playerName** (Steam)")
+                appendLine("🎮 Player: $playerName (Steam)")
                 appendLine()
-                appendLine("📊 **Letzte 12 Stunden:**")
-                appendLine(stats12h?.extendedSummary() ?: "_Keine Matches in den letzten 12h_")
+                appendLine(stats12h?.discordFormat("📊 Tagesstatistik:") ?: "📊 Tagesstatistik:\nKeine Matches in den letzten 12h")
                 appendLine()
-                appendLine("📅 **Woche (seit Mo. 06:00 Uhr):**")
-                appendLine(statsWeek?.extendedSummary() ?: "_Keine Matches diese Woche_")
+                appendLine(statsWeek?.discordFormat("📅 Wochenstatistik:") ?: "📅 Wochenstatistik:\nKeine Matches diese Woche")
                 appendLine()
-                appendLine("🕐 _Stand: $timestamp")
+                append("🕐 Stand: $timestamp")
             }
 
             println("📤 Sende Stats für $playerName an #$channel ...")
