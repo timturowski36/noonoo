@@ -1,60 +1,89 @@
-import domain.model.QueryResult
 import outputs.discord.DiscordBot
-import outputs.discord.renderers.BundesligaDiscordRenderer
-import sources.bundesliga.BundesligaModule
-import sources.bundesliga.model.BundesligaSettings
-import sources.bundesliga.queries.NaechsteSpieleQuery
-import sources.bundesliga.queries.NaechsteSpieleQuerySettings
-import sources.bundesliga.queries.TabelleQuery
-import sources.bundesliga.queries.TabelleQuerySettings
-import sources.bundesliga.queries.Top4TabellenQuerySettings
-import sources.bundesliga.queries.Top5TabellenQuery
-import sources.pubg.model.PubgSettings
-import sources.pubg.queries.AccountIdQuery
-import sources.pubg.queries.AccountIdQuerySettings
-import sources.pubg.queries.Last12hStatsQuery
-import sources.pubg.queries.Last12hStatsQuerySettings
-import sources.pubg.queries.TotalWinsQuery
-import sources.pubg.queries.TotalWinsQuerySettings
+import sources.`pubg-api`.api.PubgApiClient
+import sources.pubg.config.PubgConfigLoader
 
-suspend fun main() {
-
+fun main() {
     println("═══════════════════════════════════════")
-    println("       🎮 FeedKrake - Discord Test")
+    println("       🎮 FeedKrake - Auto Stats")
     println("═══════════════════════════════════════")
-
-    // ─── Discord Webhook Test ────────────────────────────────────────────
-
-    println("\n=== DISCORD WEBHOOK TEST ===")
 
     val bot = DiscordBot.create()
-
-    // Channel-Name = Dateiname ohne .txt
-    // allgemein → src/outputs/discord/config/allgemein.txt
     val channel = "allgemein"
+    val platform = "steam"
+    val players = listOf("brotrustgaming", "philipnc")
 
-    // Test-Nachricht
-    val testMessage = buildString {
-        appendLine("🎮 **PUBG Stats Update** - Test")
-        appendLine()
-        appendLine("👤 **Spieler:** brotrustgaming")
-        appendLine("🖥️ **Plattform:** Steam")
-        appendLine()
-        appendLine("🏆 **Lifetime Wins:** 42")
-        appendLine("📊 **Letzte 12h:** 5 Matches | 2 Wins | 15 Kills | K/D: 3.75")
-        appendLine()
-        appendLine("✅ *Dies ist eine Testnachricht von FeedKrake*")
+    while (true) {
+        val timestamp = java.time.LocalDateTime
+            .now(java.time.ZoneId.of("Europe/Berlin"))
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+        println("\n[$timestamp] ── Starte Stats-Update ──")
+
+        val apiKey = PubgConfigLoader.loadApiKey()
+        if (apiKey == null) {
+            println("❌ API Key nicht gefunden. Nächster Versuch in 15 Minuten...")
+            Thread.sleep(15 * 60 * 1_000L)
+            continue
+        }
+
+        val client = PubgApiClient(apiKey)
+
+        for (playerName in players) {
+            println("\n── $playerName ──────────────────────────")
+
+            val accountId = client.fetchAccountId(playerName, platform)
+            if (accountId == null) {
+                println("❌ Account-ID für $playerName nicht gefunden, überspringe...")
+                continue
+            }
+            println("✅ Account-ID gefunden: $accountId")
+
+            // Kurze Pause zwischen den API-Calls (Rate Limit)
+            Thread.sleep(2_000L)
+
+            val stats12h = client.fetchRecentStats(platform, accountId, hours = 12)
+            println("12h Stats: ${stats12h?.extendedSummary() ?: "null"}")
+
+            Thread.sleep(2_000L)
+
+            val hoursWeek = calculateHoursSinceMonday()
+            val statsWeek = client.fetchRecentStats(platform, accountId, hours = hoursWeek, maxMatches = 100)
+            println("Wochen Stats: ${statsWeek?.extendedSummary() ?: "null"}")
+
+            val message = buildString {
+                appendLine("🎮 **PUBG Stats – $playerName** (Steam)")
+                appendLine()
+                appendLine("📊 **Letzte 12 Stunden:**")
+                appendLine(stats12h?.extendedSummary() ?: "_Keine Matches in den letzten 12h_")
+                appendLine()
+                appendLine("📅 **Woche (seit Mo. 06:00 Uhr):**")
+                appendLine(statsWeek?.extendedSummary() ?: "_Keine Matches diese Woche_")
+                appendLine()
+                appendLine("🕐 _Stand: $timestamp")
+            }
+
+            println("📤 Sende Stats für $playerName an #$channel ...")
+            val success = bot.sendMessageToChannel(channel, message)
+            println(if (success) "✅ Gesendet." else "❌ Fehler beim Senden – Webhook prüfen.")
+
+            // Pause zwischen den Spielern
+            if (playerName != players.last()) {
+                println("⏸️ Warte 5 Sekunden vor dem nächsten Spieler...")
+                Thread.sleep(5_000L)
+            }
+        }
+
+        println("\n⏳ Nächster Durchlauf in 15 Minuten...")
+        Thread.sleep(30 * 60 * 1_000L)
     }
+}
 
-    println("📤 Sende Testnachricht an '$channel'...")
-    val success = bot.sendMessageToChannel(channel, testMessage)
-
-    if (success) {
-        println("✅ Test erfolgreich! Nachricht wurde an Discord gesendet.")
+fun calculateHoursSinceMonday(): Int {
+    val now = java.time.LocalDateTime.now(java.time.ZoneId.of("Europe/Berlin"))
+    val lastMonday = if (now.dayOfWeek == java.time.DayOfWeek.MONDAY && now.hour >= 6) {
+        now.toLocalDate()
     } else {
-        println("❌ Test fehlgeschlagen. Prüfe die Webhook-URL in allgemein.txt")
+        now.toLocalDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
     }
-
-    println()
-    println("═══════════════════════════════════════")
+    val weekStart = lastMonday.atTime(6, 0)
+    return java.time.temporal.ChronoUnit.HOURS.between(weekStart, now).toInt().coerceAtLeast(1)
 }
