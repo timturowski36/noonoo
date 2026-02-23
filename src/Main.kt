@@ -1,6 +1,7 @@
 import outputs.discord.DiscordBot
 import sources.`pubg-api`.api.PubgApiClient
 import sources.bf6.api.Bf6ApiClient
+import sources.bf6.config.Bf6SnapshotManager
 import sources.pubg.config.PubgConfigLoader
 
 fun main() {
@@ -14,6 +15,7 @@ fun main() {
     val players = listOf("brotrustgaming", "philipnc")
     val bf6Players = listOf("brotrustgaming", "philipnc")
     val bf6Client = Bf6ApiClient()
+    val bf6Snapshots = Bf6SnapshotManager()
 
     while (true) {
         val timestamp = java.time.LocalDateTime
@@ -87,10 +89,19 @@ fun main() {
                 continue
             }
 
+            // Wochenbasislinie prüfen und ggf. neu setzen (jede Woche Mo. 06:00)
+            if (bf6Snapshots.isBaselineStale(playerName)) {
+                println("🔄 [BF6] Neue Wochenbasislinie für $playerName wird gesetzt...")
+                bf6Snapshots.saveBaseline(playerName, bf6Stats)
+            }
+            val baseline = bf6Snapshots.loadBaseline(playerName) ?: bf6Stats
+
             val bf6Message = buildString {
                 appendLine("🎮 Player: ${bf6Stats.userName} (PC)")
                 appendLine()
                 appendLine(bf6Stats.discordFormat())
+                appendLine()
+                appendLine(bf6Stats.weeklyFormat(baseline))
                 appendLine()
                 append("🕐 Stand: $timestamp")
             }
