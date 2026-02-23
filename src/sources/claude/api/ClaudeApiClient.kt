@@ -78,6 +78,66 @@ WICHTIG: Antworte NUR mit validem JSON. Keine Erklärungen, kein Markdown, nur d
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Webseite laden und mit Claude analysieren
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private val webFetcher = WebFetcher()
+
+    /**
+     * Lädt eine Webseite und analysiert sie mit Claude.
+     * @param url Die URL der Webseite
+     * @param prompt Was soll aus der Seite extrahiert werden?
+     * @param context Optionaler Prompt-Kontext für strukturierte Ausgabe
+     */
+    fun analyzeWebpage(url: String, prompt: String, context: PromptContext? = null): ClaudeResponse? {
+        val webContent = webFetcher.fetch(url) ?: return null
+
+        val fullPrompt = buildString {
+            appendLine("URL: $url")
+            webContent.title?.let { appendLine("Titel: $it") }
+            appendLine()
+            appendLine("=== WEBSEITEN-INHALT ===")
+            appendLine(webContent.truncatedText(12000))
+            appendLine("=== ENDE WEBSEITEN-INHALT ===")
+            appendLine()
+            append(prompt)
+        }
+
+        return if (context != null) {
+            sendWithContext(context, fullPrompt)
+        } else {
+            sendMessage(fullPrompt)
+        }
+    }
+
+    /**
+     * Lädt eine Webseite und extrahiert strukturierte Daten als JSON.
+     * @param url Die URL der Webseite
+     * @param context Der Prompt-Kontext (definiert das erwartete JSON-Schema)
+     * @param additionalPrompt Zusätzliche Anweisungen
+     */
+    fun extractFromWebpage(url: String, context: PromptContext, additionalPrompt: String = ""): ClaudeResponse? {
+        val webContent = webFetcher.fetch(url) ?: return null
+
+        val fullPrompt = buildString {
+            appendLine("Analysiere folgende Webseite und extrahiere die Daten:")
+            appendLine()
+            appendLine("URL: $url")
+            webContent.title?.let { appendLine("Titel: $it") }
+            appendLine()
+            appendLine("=== WEBSEITEN-INHALT ===")
+            appendLine(webContent.truncatedText(12000))
+            appendLine("=== ENDE WEBSEITEN-INHALT ===")
+            if (additionalPrompt.isNotEmpty()) {
+                appendLine()
+                append(additionalPrompt)
+            }
+        }
+
+        return queryForDto(context, fullPrompt)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Request Body bauen (manuell, da kein JSON-Library)
     // ─────────────────────────────────────────────────────────────────────────
 

@@ -112,6 +112,82 @@ Antworte IMMER im JSON-Format. Erkenne automatisch die passende Struktur.""",
     )
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Web-Scraping / Webseiten-Analyse
+    // ─────────────────────────────────────────────────────────────────────────
+
+    val WEB_ARTICLE = PromptContext(
+        name = "web_article",
+        description = "Artikel von Webseite extrahieren",
+        systemPrompt = """Du bist ein Web-Scraping-Assistent. Extrahiere den Hauptartikel aus dem Webseiten-Inhalt.
+Antworte im JSON-Format:
+{
+  "title": "Artikel-Titel",
+  "author": "Autor (falls vorhanden)",
+  "date": "Veröffentlichungsdatum (falls vorhanden)",
+  "summary": "Kurze Zusammenfassung in 2-3 Sätzen",
+  "content": "Vollständiger Artikeltext"
+}""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    val WEB_TABLE = PromptContext(
+        name = "web_table",
+        description = "Tabellen-Daten von Webseite extrahieren",
+        systemPrompt = """Du bist ein Web-Scraping-Assistent. Extrahiere Tabellen-Daten aus dem Webseiten-Inhalt.
+Antworte im JSON-Format:
+{
+  "tableName": "Name/Beschreibung der Tabelle",
+  "headers": ["Spalte1", "Spalte2", ...],
+  "rows": [
+    {"Spalte1": "Wert1", "Spalte2": "Wert2", ...},
+    ...
+  ]
+}""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    val WEB_PRODUCTS = PromptContext(
+        name = "web_products",
+        description = "Produkt-Informationen von Webseite extrahieren",
+        systemPrompt = """Du bist ein Web-Scraping-Assistent. Extrahiere Produkt-Informationen aus dem Webseiten-Inhalt.
+Antworte im JSON-Format:
+{
+  "products": [
+    {"name": "Produktname", "price": "Preis", "description": "Beschreibung", "availability": "Verfügbarkeit"},
+    ...
+  ]
+}""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    val WEB_EVENTS = PromptContext(
+        name = "web_events",
+        description = "Events/Termine von Webseite extrahieren",
+        systemPrompt = """Du bist ein Web-Scraping-Assistent. Extrahiere Event- und Termin-Informationen.
+Antworte im JSON-Format:
+{
+  "events": [
+    {"name": "Event-Name", "date": "Datum", "time": "Uhrzeit", "location": "Ort", "description": "Beschreibung"},
+    ...
+  ]
+}""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    val WEB_CUSTOM = PromptContext(
+        name = "web_custom",
+        description = "Benutzerdefinierte Daten-Extraktion",
+        systemPrompt = """Du bist ein Web-Scraping-Assistent. Extrahiere die angeforderten Informationen aus dem Webseiten-Inhalt.
+Antworte IMMER im JSON-Format. Strukturiere die Daten sinnvoll basierend auf der Anfrage.""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Freestyle (kein fester Kontext)
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -134,6 +210,11 @@ Antworte IMMER im JSON-Format. Erkenne automatisch die passende Struktur.""",
         GAMING_NEWS,
         DATA_EXTRACTION,
         TRANSLATE_DE_EN,
+        WEB_ARTICLE,
+        WEB_TABLE,
+        WEB_PRODUCTS,
+        WEB_EVENTS,
+        WEB_CUSTOM,
         FREESTYLE
     )
 
