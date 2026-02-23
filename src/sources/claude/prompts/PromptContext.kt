@@ -188,6 +188,66 @@ Antworte IMMER im JSON-Format. Strukturiere die Daten sinnvoll basierend auf der
     )
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Handball (handball.net / handball4all)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    val HANDBALL_SCHEDULE = PromptContext(
+        name = "handball_schedule",
+        description = "Handball-Spielplan extrahieren (kommende Spiele)",
+        systemPrompt = """Du bist ein Handball-Daten-Assistent. Extrahiere den Spielplan aus dem Webseiten-Inhalt.
+Antworte im JSON-Format:
+{
+  "team": "Mannschaftsname",
+  "league": "Liga/Klasse",
+  "season": "2025/26",
+  "upcomingMatches": [
+    {"date": "2026-03-15", "time": "18:00", "home": "Heimteam", "away": "Auswärtsteam", "venue": "Halle", "isHome": true},
+    ...
+  ]
+}
+Sortiere nach Datum aufsteigend. Nur zukünftige Spiele ohne Ergebnis.""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    val HANDBALL_RESULTS = PromptContext(
+        name = "handball_results",
+        description = "Handball-Ergebnisse extrahieren (vergangene Spiele)",
+        systemPrompt = """Du bist ein Handball-Daten-Assistent. Extrahiere die Spielergebnisse aus dem Webseiten-Inhalt.
+Antworte im JSON-Format:
+{
+  "team": "Mannschaftsname",
+  "league": "Liga/Klasse",
+  "season": "2025/26",
+  "results": [
+    {"date": "2026-02-15", "home": "Heimteam", "away": "Auswärtsteam", "scoreHome": 28, "scoreAway": 25, "isHome": true, "won": true},
+    ...
+  ]
+}
+Sortiere nach Datum absteigend (neueste zuerst). Nur Spiele mit Ergebnis.""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    val HANDBALL_TABLE = PromptContext(
+        name = "handball_table",
+        description = "Handball-Tabelle extrahieren",
+        systemPrompt = """Du bist ein Handball-Daten-Assistent. Extrahiere die Ligatabelle aus dem Webseiten-Inhalt.
+Antworte im JSON-Format:
+{
+  "league": "Liga/Klasse",
+  "season": "2025/26",
+  "teams": [
+    {"rank": 1, "name": "Teamname", "played": 18, "won": 14, "drawn": 2, "lost": 2, "goalsFor": 520, "goalsAgainst": 450, "goalDiff": 70, "points": 30},
+    ...
+  ]
+}
+Sortiere nach Tabellenplatz.""",
+        userPrefix = "",
+        userSuffix = ""
+    )
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Freestyle (kein fester Kontext)
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -215,6 +275,9 @@ Antworte IMMER im JSON-Format. Strukturiere die Daten sinnvoll basierend auf der
         WEB_PRODUCTS,
         WEB_EVENTS,
         WEB_CUSTOM,
+        HANDBALL_SCHEDULE,
+        HANDBALL_RESULTS,
+        HANDBALL_TABLE,
         FREESTYLE
     )
 
