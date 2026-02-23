@@ -1,5 +1,6 @@
 import outputs.discord.DiscordBot
 import sources.`pubg-api`.api.PubgApiClient
+import sources.bf6.api.Bf6ApiClient
 import sources.pubg.config.PubgConfigLoader
 
 fun main() {
@@ -11,6 +12,8 @@ fun main() {
     val channel = "allgemein"
     val platform = "steam"
     val players = listOf("brotrustgaming", "philipnc")
+    val bf6Players = listOf("brotrustgaming", "philipnc")
+    val bf6Client = Bf6ApiClient()
 
     while (true) {
         val timestamp = java.time.LocalDateTime
@@ -71,6 +74,34 @@ fun main() {
             if (playerName != players.last()) {
                 println("⏸️ Warte 5 Sekunden vor dem nächsten Spieler...")
                 Thread.sleep(5_000L)
+            }
+        }
+
+        // ── Battlefield 6 Stats ──────────────────────────────────────────
+        for (playerName in bf6Players) {
+            println("\n── [BF6] $playerName ────────────────────────")
+
+            val bf6Stats = bf6Client.fetchStats(playerName)
+            if (bf6Stats == null) {
+                println("❌ [BF6] Stats für $playerName nicht gefunden, überspringe...")
+                continue
+            }
+
+            val bf6Message = buildString {
+                appendLine("🎮 Player: ${bf6Stats.userName} (PC)")
+                appendLine()
+                appendLine(bf6Stats.discordFormat())
+                appendLine()
+                append("🕐 Stand: $timestamp")
+            }
+
+            println("📤 Sende BF6 Stats für $playerName an #$channel ...")
+            val success = bot.sendMessageToChannel(channel, bf6Message)
+            println(if (success) "✅ Gesendet." else "❌ Fehler beim Senden – Webhook prüfen.")
+
+            if (playerName != bf6Players.last()) {
+                println("⏸️ Warte 2 Sekunden vor dem nächsten Spieler...")
+                Thread.sleep(2_000L)
             }
         }
 
