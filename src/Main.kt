@@ -7,6 +7,8 @@ import sources.claude.prompts.PromptContexts
 import sources.claude.model.HandballSchedule
 import sources.claude.model.HandballResults
 import sources.claude.model.HandballTable
+import sources.claude.model.ClaudeResponse
+import sources.claude.cache.HandballCacheManager
 
 fun main() {
     // ══════════════════════════════════════════════════════════════════════════
@@ -114,82 +116,117 @@ fun testClaudeHandball() {
     println("   🤾 Claude API + Handball Test")
     println("═══════════════════════════════════════")
 
-    // 1. API Key laden
-    val apiKey = ClaudeConfigLoader.loadApiKey()
-    if (apiKey == null) {
-        println("❌ Claude API Key nicht gefunden!")
-        println("   Bitte Key in: src/sources/claude/config/claude_api_key.txt ablegen")
-        return
+    // Cache-Manager initialisieren
+    val cache = HandballCacheManager()
+    cache.printCacheStatus()
+
+    // 1. API Key laden (nur wenn API-Aufrufe nötig)
+    val needsApi = !cache.hasScheduleCache() || !cache.hasResultsCache() || !cache.hasTableCache()
+
+    val client: ClaudeApiClient? = if (needsApi) {
+        val apiKey = ClaudeConfigLoader.loadApiKey()
+        if (apiKey == null) {
+            println("❌ Claude API Key nicht gefunden!")
+            println("   Bitte Key in: src/sources/claude/config/claude_api_key.txt ablegen")
+            return
+        }
+        ClaudeApiClient(apiKey)
+    } else {
+        println("\n✅ Alle Daten aus Cache verfügbar - keine API-Aufrufe nötig!")
+        null
     }
 
-    val client = ClaudeApiClient(apiKey)
     val handballUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/spielplan"
+    val tableUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/tabelle"
 
-    // 2. Nächste Spiele abfragen
-    println("\n── Lade Spielplan... ──────────────────")
-    val scheduleResponse = client.extractFromWebpage(
-        url = handballUrl,
-        context = PromptContexts.HANDBALL_SCHEDULE
-    )
+    // 2. Nächste Spiele abfragen (oder aus Cache laden)
+    println("\n── Spielplan... ───────────────────────")
+    val scheduleResponse: ClaudeResponse? = if (cache.hasScheduleCache()) {
+        cache.loadScheduleJson()?.let { ClaudeResponse.fromCache(it) }
+    } else {
+        val response = client?.extractFromWebpage(
+            url = handballUrl,
+            context = PromptContexts.HANDBALL_SCHEDULE
+        )
+        response?.extractJsonBlock()?.let { cache.saveSchedule(it) }
+        response
+    }
 
     if (scheduleResponse != null) {
-        println("\n📋 Raw Response (gekürzt):")
-        println(scheduleResponse.text.take(500) + "...")
-
         val schedule = HandballSchedule.fromResponse(scheduleResponse)
         if (schedule != null) {
-            println("\n" + schedule.discordFormat())
+            println(schedule.discordFormat())
         } else {
             println("❌ Konnte Spielplan nicht parsen")
         }
     } else {
-        println("❌ Keine Antwort erhalten")
+        println("❌ Keine Daten verfügbar")
     }
 
-    // 3. Ergebnisse abfragen
-    println("\n── Lade Ergebnisse... ─────────────────")
-    val resultsResponse = client.extractFromWebpage(
-        url = handballUrl,
-        context = PromptContexts.HANDBALL_RESULTS
-    )
+    // 3. Ergebnisse abfragen (oder aus Cache laden)
+    println("\n── Ergebnisse... ──────────────────────")
+    val resultsResponse: ClaudeResponse? = if (cache.hasResultsCache()) {
+        cache.loadResultsJson()?.let { ClaudeResponse.fromCache(it) }
+    } else {
+        val response = client?.extractFromWebpage(
+            url = handballUrl,
+            context = PromptContexts.HANDBALL_RESULTS
+        )
+        response?.extractJsonBlock()?.let { cache.saveResults(it) }
+        response
+    }
 
     if (resultsResponse != null) {
         val results = HandballResults.fromResponse(resultsResponse)
         if (results != null) {
-            println("\n" + results.discordFormat())
+            println(results.discordFormat())
         } else {
             println("❌ Konnte Ergebnisse nicht parsen")
         }
+    } else {
+        println("❌ Keine Daten verfügbar")
     }
 
-    // 4. Tabelle abfragen (andere URL)
-    println("\n── Lade Tabelle... ────────────────────")
-    val tableUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/tabelle"
-    val tableResponse = client.extractFromWebpage(
-        url = tableUrl,
-        context = PromptContexts.HANDBALL_TABLE
-    )
+    // 4. Tabelle abfragen (oder aus Cache laden)
+    println("\n── Tabelle... ─────────────────────────")
+    val tableResponse: ClaudeResponse? = if (cache.hasTableCache()) {
+        cache.loadTableJson()?.let { ClaudeResponse.fromCache(it) }
+    } else {
+        val response = client?.extractFromWebpage(
+            url = tableUrl,
+            context = PromptContexts.HANDBALL_TABLE
+        )
+        response?.extractJsonBlock()?.let { cache.saveTable(it) }
+        response
+    }
 
     if (tableResponse != null) {
         val table = HandballTable.fromResponse(tableResponse)
         if (table != null) {
-            println("\n" + table.discordFormat())
+            println(table.discordFormat())
         } else {
             println("❌ Konnte Tabelle nicht parsen")
         }
+    } else {
+        println("❌ Keine Daten verfügbar")
     }
 
-    // 5. Token-Kosten anzeigen
-    println("\n── Kosten-Zusammenfassung ─────────────")
-    val totalInput = listOfNotNull(scheduleResponse, resultsResponse, tableResponse)
-        .sumOf { it.inputTokens }
-    val totalOutput = listOfNotNull(scheduleResponse, resultsResponse, tableResponse)
-        .sumOf { it.outputTokens }
+    // 5. Kosten-Zusammenfassung (nur für API-Aufrufe)
+    val apiResponses = listOfNotNull(scheduleResponse, resultsResponse, tableResponse)
+        .filter { !it.fromCache }
 
-    println("Input Tokens:  $totalInput")
-    println("Output Tokens: $totalOutput")
-    println("Geschätzte Kosten (Sonnet): ~$${"%.4f".format((totalInput * 3.0 + totalOutput * 15.0) / 1_000_000)}")
-    println("Geschätzte Kosten (Haiku):  ~$${"%.4f".format((totalInput * 0.8 + totalOutput * 4.0) / 1_000_000)}")
+    if (apiResponses.isNotEmpty()) {
+        println("\n── Kosten-Zusammenfassung ─────────────")
+        val totalInput = apiResponses.sumOf { it.inputTokens }
+        val totalOutput = apiResponses.sumOf { it.outputTokens }
+
+        println("Input Tokens:  $totalInput")
+        println("Output Tokens: $totalOutput")
+        println("Geschätzte Kosten (Sonnet): ~$${"%.4f".format((totalInput * 3.0 + totalOutput * 15.0) / 1_000_000)}")
+        println("Geschätzte Kosten (Haiku):  ~$${"%.4f".format((totalInput * 0.8 + totalOutput * 4.0) / 1_000_000)}")
+    } else {
+        println("\n── Keine API-Kosten (alles aus Cache) ─")
+    }
 
     println("\n✅ Test abgeschlossen!")
 }

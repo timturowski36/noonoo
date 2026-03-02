@@ -182,18 +182,57 @@ WICHTIG: Antworte NUR mit validem JSON. Keine Erklärungen, kein Markdown, nur d
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Manuelles JSON String-Parsing (vermeidet Regex StackOverflow)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun extractJsonStringValue(json: String, key: String): String? {
+        val keyPattern = "\"$key\""
+        var pos = json.indexOf(keyPattern)
+        if (pos == -1) return null
+
+        // Finde ':' nach dem Key
+        pos = json.indexOf(':', pos + keyPattern.length)
+        if (pos == -1) return null
+
+        // Überspringe Whitespace
+        pos++
+        while (pos < json.length && json[pos].isWhitespace()) pos++
+
+        // Erwarte '"'
+        if (pos >= json.length || json[pos] != '"') return null
+        pos++
+
+        // Extrahiere String-Inhalt mit Escape-Handling
+        val result = StringBuilder()
+        while (pos < json.length) {
+            when (val c = json[pos]) {
+                '\\' -> {
+                    pos++
+                    if (pos >= json.length) break
+                    when (json[pos]) {
+                        'n' -> result.append('\n')
+                        'r' -> result.append('\r')
+                        't' -> result.append('\t')
+                        '"' -> result.append('"')
+                        '\\' -> result.append('\\')
+                        else -> result.append(json[pos])
+                    }
+                }
+                '"' -> return result.toString()
+                else -> result.append(c)
+            }
+            pos++
+        }
+        return null
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Response parsen
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun parseResponse(body: String): ClaudeResponse? {
-        // Extrahiere "text" aus content[0].text
-        val textRegex = Regex(""""text"\s*:\s*"((?:[^"\\]|\\.)*)"""")
-        val textMatch = textRegex.find(body)
-        val text = textMatch?.groupValues?.get(1)
-            ?.replace("\\n", "\n")
-            ?.replace("\\\"", "\"")
-            ?.replace("\\\\", "\\")
-            ?: return null
+        // Extrahiere "text" aus content[0].text (manuelles Parsing um StackOverflow zu vermeiden)
+        val text = extractJsonStringValue(body, "text") ?: return null
 
         // Extrahiere usage Informationen
         val inputTokensRegex = Regex(""""input_tokens"\s*:\s*(\d+)""")

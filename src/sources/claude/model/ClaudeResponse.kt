@@ -4,8 +4,23 @@ data class ClaudeResponse(
     val text: String,
     val model: String,
     val inputTokens: Int,
-    val outputTokens: Int
+    val outputTokens: Int,
+    val fromCache: Boolean = false
 ) {
+    companion object {
+        /**
+         * Erstellt eine ClaudeResponse aus gecachtem JSON-Text.
+         */
+        fun fromCache(jsonText: String): ClaudeResponse {
+            return ClaudeResponse(
+                text = jsonText,
+                model = "cached",
+                inputTokens = 0,
+                outputTokens = 0,
+                fromCache = true
+            )
+        }
+    }
     val totalTokens: Int get() = inputTokens + outputTokens
 
     // ─────────────────────────────────────────────────────────────────────────
