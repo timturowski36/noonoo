@@ -12,7 +12,7 @@ fun main() {
     val bot = DiscordBot.create()
     val channel = "allgemein"
     val platform = "steam"
-    val players = listOf("brotrustgaming", "philipnc")
+    val players = listOf("brotrustgaming", "philipnc", "chrissi1970")
     val bf6Players = listOf("brotrustgaming", "philipnc")
     val bf6Client = Bf6ApiClient()
     val bf6Snapshots = Bf6SnapshotManager()
@@ -42,7 +42,6 @@ fun main() {
             }
             println("✅ Account-ID gefunden: $accountId")
 
-            // Kurze Pause zwischen den API-Calls (Rate Limit)
             Thread.sleep(2_000L)
 
             val stats12h = client.fetchRecentStats(platform, accountId, hours = 12)
@@ -57,9 +56,13 @@ fun main() {
             val message = buildString {
                 appendLine("🎮 Player: $playerName (Steam)")
                 appendLine()
-                appendLine(stats12h?.basicFormat("📊 Tagesstatistik:") ?: "📊 Tagesstatistik:\nKeine Matches in den letzten 12h")
+                appendLine(
+                    stats12h?.basicFormat("📊 Tagesstatistik:") ?: "📊 Tagesstatistik:\nKeine Matches in den letzten 12h"
+                )
                 appendLine()
-                appendLine(statsWeek?.basicFormat("📅 Wochenstatistik:") ?: "📅 Wochenstatistik:\nKeine Matches diese Woche")
+                appendLine(
+                    statsWeek?.basicFormat("📅 Wochenstatistik:") ?: "📅 Wochenstatistik:\nKeine Matches diese Woche"
+                )
                 appendLine()
                 if (statsWeek != null) {
                     appendLine(statsWeek.weeklyExtras())
@@ -72,51 +75,15 @@ fun main() {
             val success = bot.sendMessageToChannel(channel, message)
             println(if (success) "✅ Gesendet." else "❌ Fehler beim Senden – Webhook prüfen.")
 
-            // Pause zwischen den Spielern
+            // Kurze Pause zwischen den Spielern (nur Rate Limit, kein langes Warten mehr)
             if (playerName != players.last()) {
                 println("⏸️ Warte 5 Sekunden vor dem nächsten Spieler...")
                 Thread.sleep(5_000L)
             }
         }
 
-        // ── Battlefield 6 Stats ──────────────────────────────────────────
-        for (playerName in bf6Players) {
-            println("\n── [BF6] $playerName ────────────────────────")
-
-            val bf6Stats = bf6Client.fetchStats(playerName)
-            if (bf6Stats == null) {
-                println("❌ [BF6] Stats für $playerName nicht gefunden, überspringe...")
-                continue
-            }
-
-            // Wochenbasislinie prüfen und ggf. neu setzen (jede Woche Mo. 06:00)
-            if (bf6Snapshots.isBaselineStale(playerName)) {
-                println("🔄 [BF6] Neue Wochenbasislinie für $playerName wird gesetzt...")
-                bf6Snapshots.saveBaseline(playerName, bf6Stats)
-            }
-            val baseline = bf6Snapshots.loadBaseline(playerName) ?: bf6Stats
-
-            val bf6Message = buildString {
-                appendLine("🎮 Player: ${bf6Stats.userName} (PC)")
-                appendLine()
-                appendLine(bf6Stats.discordFormat())
-                appendLine()
-                appendLine(bf6Stats.weeklyFormat(baseline))
-                appendLine()
-                append("🕐 Stand: $timestamp")
-            }
-
-            println("📤 Sende BF6 Stats für $playerName an #$channel ...")
-            val success = bot.sendMessageToChannel(channel, bf6Message)
-            println(if (success) "✅ Gesendet." else "❌ Fehler beim Senden – Webhook prüfen.")
-
-            if (playerName != bf6Players.last()) {
-                println("⏸️ Warte 2 Sekunden vor dem nächsten Spieler...")
-                Thread.sleep(2_000L)
-            }
-        }
-
-        println("\n⏳ Nächster Durchlauf in 15 Minuten...")
+        // Nach allen Spielern: 30 Minuten warten
+        println("\n✅ Alle Spieler abgearbeitet. Nächstes Update in 30 Minuten...")
         Thread.sleep(30 * 60 * 1_000L)
     }
 }
