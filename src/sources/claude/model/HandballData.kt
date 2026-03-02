@@ -57,8 +57,7 @@ data class HandballResults(
             appendLine("🤾 **$team** – Ergebnisse ($season)")
             appendLine("Liga: $league | Bilanz: $wins Siege, $losses Niederlagen")
             appendLine("```")
-            results.take(10).forEach { appendLine(it.discordFormat()) }
-            if (results.size > 10) appendLine("... und ${results.size - 10} weitere")
+            results.forEach { appendLine(it.discordFormat()) }
             append("```")
         }
     }
@@ -157,7 +156,7 @@ data class HandballTeamStanding(
 ) {
     fun discordFormat(): String {
         val nameFormatted = name.take(22).padEnd(22)
-        return "${"$rank.".padStart(3)} $nameFormatted | ${"$played".padStart(2)} | $won-$drawn-$lost | $goalsFor:$goalsAgainst | ${"$points".padStart(2)}"
+        return "${"$rank.".padStart(3)} $nameFormatted | ${"$played".padStart(2)} | $goalsFor:$goalsAgainst | ${"$points".padStart(2)}"
     }
 }
 
@@ -173,8 +172,8 @@ data class HandballTable(
         return buildString {
             appendLine("🤾 **$league** – Tabelle ($season)")
             appendLine("```")
-            appendLine("Pl. Team                   | Sp | S-U-N | Tore    | Pkt")
-            appendLine("─".repeat(58))
+            appendLine("Pl. Team                   | Sp | Tore    | Pkt")
+            appendLine("─".repeat(50))
             teams.forEach { appendLine(it.discordFormat()) }
             append("```")
         }
