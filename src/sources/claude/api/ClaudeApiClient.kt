@@ -50,7 +50,26 @@ class ClaudeApiClient(
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
 
             if (response.statusCode() != 200) {
-                println("❌ [Claude] HTTP ${response.statusCode()}: ${response.body().take(500)}")
+                val errorBody = response.body()
+                println("❌ [Claude] HTTP ${response.statusCode()}")
+
+                // Bekannte Fehler mit hilfreichen Meldungen
+                when {
+                    errorBody.contains("credit balance is too low") -> {
+                        println("   💳 Dein API-Guthaben ist aufgebraucht!")
+                        println("   → Gehe zu: https://console.anthropic.com/settings/billing")
+                    }
+                    errorBody.contains("invalid_api_key") || errorBody.contains("authentication") -> {
+                        println("   🔑 API-Key ungültig oder abgelaufen!")
+                        println("   → Prüfe: src/sources/claude/config/claude_api_key.txt")
+                    }
+                    errorBody.contains("rate_limit") -> {
+                        println("   ⏱️ Rate-Limit erreicht, bitte warten...")
+                    }
+                    else -> {
+                        println("   ${errorBody.take(200)}")
+                    }
+                }
                 return null
             }
 
