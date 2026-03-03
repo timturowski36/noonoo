@@ -3,8 +3,164 @@ import sources.`pubg-api`.api.PubgApiClient
 import sources.bf6.api.Bf6ApiClient
 import sources.bf6.config.Bf6SnapshotManager
 import sources.pubg.config.PubgConfigLoader
+import sources.claude.api.ClaudeApiClient
+import sources.claude.config.ClaudeConfigLoader
+import sources.claude.prompts.PromptContexts
+import sources.claude.model.HandballSchedule
+import sources.claude.model.HandballResults
+import sources.claude.model.HandballTable
+import sources.claude.model.ClaudeResponse
+import sources.claude.cache.HandballCacheManager
+import scheduler.FeedKrakeScheduler
+import scheduler.config.FeedKrakeConfig
 
-fun main() {
+fun main(args: Array<String>) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // Kommandozeilen-Argumente prüfen
+    // ══════════════════════════════════════════════════════════════════════════
+    when (args.getOrNull(0)) {
+        "--scheduler", "-s" -> {
+            startScheduler()
+            return
+        }
+        "--config", "-c" -> {
+            showConfig()
+            return
+        }
+        "--help", "-h" -> {
+            printHelp()
+            return
+        }
+        "--pubg" -> {
+            runPubgLoop()
+            return
+        }
+        "--handball" -> {
+            testClaudeHandball()
+            return
+        }
+    }
+
+    // Standard: Interaktives Menü
+    interactiveMenu()
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Interaktives Menü
+// ══════════════════════════════════════════════════════════════════════════════
+
+fun interactiveMenu() {
+    while (true) {
+        println("""
+
+    ╔═══════════════════════════════════════╗
+    ║        🐙 FeedKrake - Menü            ║
+    ╠═══════════════════════════════════════╣
+    ║  1. Scheduler starten                 ║
+    ║  2. Konfiguration anzeigen            ║
+    ║  3. Handball Test                     ║
+    ║  4. PUBG Stats Loop                   ║
+    ║                                       ║
+    ║  0. Beenden                           ║
+    ╚═══════════════════════════════════════╝
+
+    Auswahl: """.trimIndent())
+
+        when (readlnOrNull()?.trim()) {
+            "1" -> startScheduler()
+            "2" -> showConfig()
+            "3" -> testClaudeHandball()
+            "4" -> runPubgLoop()
+            "0", "exit" -> {
+                println("Auf Wiedersehen!")
+                return
+            }
+            else -> println("❌ Ungültige Auswahl")
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Scheduler Funktionen
+// ══════════════════════════════════════════════════════════════════════════════
+
+fun startScheduler() {
+    println("🚀 Starte FeedKrake Scheduler...")
+    val scheduler = FeedKrakeScheduler()
+
+    Runtime.getRuntime().addShutdownHook(Thread {
+        println("\n👋 Scheduler wird beendet...")
+        scheduler.stop()
+    })
+
+    scheduler.start()
+}
+
+fun showConfig() {
+    println("""
+
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║              🐙 FeedKrake Konfiguration                       ║
+    ╚═══════════════════════════════════════════════════════════════╝
+    """.trimIndent())
+
+    val config = FeedKrakeConfig.load()
+
+    println("\n📡 Discord Channels (${config.channels.size}):")
+    config.channels.forEach { (name, _) ->
+        println("   • $name")
+    }
+
+    println("\n📋 Jobs (${config.jobs.size}):")
+    config.jobs.forEach { job ->
+        println("   • ${job.name}: ${job.module} → #${job.channel} (${job.schedule})")
+    }
+
+    println("\n📝 Konfiguration bearbeiten: feedkrake.config")
+}
+
+fun printHelp() {
+    println("""
+
+    🐙 FeedKrake - Hilfe
+    ════════════════════════════════════════════════════════════════
+
+    Verwendung:
+      java -jar FeedKrake.jar [OPTION]
+
+    Optionen:
+      --scheduler, -s    Scheduler starten (Dauerbetrieb)
+      --config, -c       Konfiguration anzeigen
+      --handball         Handball Test ausführen
+      --pubg             PUBG Stats Loop starten
+      --help, -h         Diese Hilfe anzeigen
+
+    Ohne Argumente:
+      Startet das interaktive Menü
+
+    Konfiguration:
+      Alle Einstellungen in: feedkrake.config
+
+      [channels]  - Discord Webhook URLs
+      [jobs]      - Automatische Jobs mit Zeitplan
+
+    Beispiel feedkrake.config:
+    ────────────────────────────────────────────────────────────────
+    [channels]
+    news = https://discord.com/api/webhooks/...
+
+    [jobs]
+    Morgennews | heise.news | täglich 08:00 | news | max=10
+    ────────────────────────────────────────────────────────────────
+
+    """.trimIndent())
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PUBG Stats Loop
+// ══════════════════════════════════════════════════════════════════════════════
+
+fun runPubgLoop() {
     println("═══════════════════════════════════════")
     println("       🎮 FeedKrake - Auto Stats")
     println("═══════════════════════════════════════")
@@ -13,9 +169,6 @@ fun main() {
     val channel = "allgemein"
     val platform = "steam"
     val players = listOf("brotrustgaming", "philipnc", "chrissi1970")
-    val bf6Players = listOf("brotrustgaming", "philipnc")
-    val bf6Client = Bf6ApiClient()
-    val bf6Snapshots = Bf6SnapshotManager()
 
     while (true) {
         val timestamp = java.time.LocalDateTime
@@ -75,14 +228,12 @@ fun main() {
             val success = bot.sendMessageToChannel(channel, message)
             println(if (success) "✅ Gesendet." else "❌ Fehler beim Senden – Webhook prüfen.")
 
-            // Kurze Pause zwischen den Spielern (nur Rate Limit, kein langes Warten mehr)
             if (playerName != players.last()) {
                 println("⏸️ Warte 5 Sekunden vor dem nächsten Spieler...")
                 Thread.sleep(5_000L)
             }
         }
 
-        // Nach allen Spielern: 30 Minuten warten
         println("\n✅ Alle Spieler abgearbeitet. Nächstes Update in 30 Minuten...")
         Thread.sleep(30 * 60 * 1_000L)
     }
@@ -97,4 +248,101 @@ fun calculateHoursSinceMonday(): Int {
     }
     val weekStart = lastMonday.atTime(6, 0)
     return java.time.temporal.ChronoUnit.HOURS.between(weekStart, now).toInt().coerceAtLeast(1)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Claude API + Handball Test
+// ══════════════════════════════════════════════════════════════════════════════
+
+fun testClaudeHandball() {
+    println("═══════════════════════════════════════")
+    println("   🤾 Claude API + Handball Test")
+    println("═══════════════════════════════════════")
+
+    val cache = HandballCacheManager()
+    cache.printCacheStatus()
+
+    val needsApi = !cache.hasScheduleCache() || !cache.hasResultsCache() || !cache.hasTableCache()
+
+    val client: ClaudeApiClient? = if (needsApi) {
+        val apiKey = ClaudeConfigLoader.loadApiKey()
+        if (apiKey == null) {
+            println("❌ Claude API Key nicht gefunden!")
+            println("   Bitte Key in: src/sources/claude/config/claude_api_key.txt ablegen")
+            return
+        }
+        ClaudeApiClient(apiKey)
+    } else {
+        println("\n✅ Alle Daten aus Cache verfügbar - keine API-Aufrufe nötig!")
+        null
+    }
+
+    val handballUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/spielplan"
+    val tableUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/tabelle"
+
+    println("\n── Spielplan... ───────────────────────")
+    val scheduleResponse: ClaudeResponse? = if (cache.hasScheduleCache()) {
+        cache.loadScheduleJson()?.let { ClaudeResponse.fromCache(it) }
+    } else {
+        val response = client?.extractFromWebpage(url = handballUrl, context = PromptContexts.HANDBALL_SCHEDULE)
+        response?.extractJsonBlock()?.let { cache.saveSchedule(it) }
+        response
+    }
+
+    if (scheduleResponse != null) {
+        val schedule = HandballSchedule.fromResponse(scheduleResponse)
+        if (schedule != null) println(schedule.discordFormat())
+        else println("❌ Konnte Spielplan nicht parsen")
+    } else {
+        println("❌ Keine Daten verfügbar")
+    }
+
+    println("\n── Ergebnisse... ──────────────────────")
+    val resultsResponse: ClaudeResponse? = if (cache.hasResultsCache()) {
+        cache.loadResultsJson()?.let { ClaudeResponse.fromCache(it) }
+    } else {
+        val response = client?.extractFromWebpage(url = handballUrl, context = PromptContexts.HANDBALL_RESULTS)
+        response?.extractJsonBlock()?.let { cache.saveResults(it) }
+        response
+    }
+
+    if (resultsResponse != null) {
+        val results = HandballResults.fromResponse(resultsResponse)
+        if (results != null) println(results.discordFormat())
+        else println("❌ Konnte Ergebnisse nicht parsen")
+    } else {
+        println("❌ Keine Daten verfügbar")
+    }
+
+    println("\n── Tabelle... ─────────────────────────")
+    val tableResponse: ClaudeResponse? = if (cache.hasTableCache()) {
+        cache.loadTableJson()?.let { ClaudeResponse.fromCache(it) }
+    } else {
+        val response = client?.extractFromWebpage(url = tableUrl, context = PromptContexts.HANDBALL_TABLE)
+        response?.extractJsonBlock()?.let { cache.saveTable(it) }
+        response
+    }
+
+    if (tableResponse != null) {
+        val table = HandballTable.fromResponse(tableResponse)
+        if (table != null) println(table.discordFormat())
+        else println("❌ Konnte Tabelle nicht parsen")
+    } else {
+        println("❌ Keine Daten verfügbar")
+    }
+
+    val apiResponses = listOfNotNull(scheduleResponse, resultsResponse, tableResponse).filter { !it.fromCache }
+
+    if (apiResponses.isNotEmpty()) {
+        println("\n── Kosten-Zusammenfassung ─────────────")
+        val totalInput = apiResponses.sumOf { it.inputTokens }
+        val totalOutput = apiResponses.sumOf { it.outputTokens }
+        println("Input Tokens:  $totalInput")
+        println("Output Tokens: $totalOutput")
+        println("Geschätzte Kosten (Sonnet): ~${"%.4f".format((totalInput * 3.0 + totalOutput * 15.0) / 1_000_000)}")
+    } else {
+        println("\n── Keine API-Kosten (alles aus Cache) ─")
+    }
+
+    println("\n✅ Test abgeschlossen!")
 }
