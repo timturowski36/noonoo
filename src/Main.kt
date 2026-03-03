@@ -2,7 +2,9 @@ import sources.heise.HeiseSource
 import sources.heise.config.HeiseModuleConfig
 import sources.heise.model.HeiseFeed
 import sources.heise.queries.KeywordSearchQuery
+import sources.heise.queries.KeywordSearchQueryConfig
 import sources.heise.queries.LatestArticlesQuery
+import sources.heise.queries.LatestArticlesQueryConfig
 
 fun main() {
     testHeiseFeed()
@@ -82,7 +84,7 @@ fun testHeiseFeed() {
         maxArticles = 50
     ))
 
-    searchSource.executeQuery(KeywordSearchQuery("KI")).fold(
+    searchSource.executeQuery(KeywordSearchQuery(KeywordSearchQueryConfig(keywords = listOf("KI")))).fold(
         onSuccess = { articles ->
             println("🔍 Gefunden: ${articles.size} Artikel mit 'KI'")
             println("```")
@@ -97,7 +99,7 @@ fun testHeiseFeed() {
 
     // 5. Detaillierte Ansicht
     println("\n── Detaillierte Artikel ───────────────")
-    heiseOnline.executeQuery(LatestArticlesQuery(3)).fold(
+    heiseOnline.executeQuery(LatestArticlesQuery(LatestArticlesQueryConfig(limit = 3))).fold(
         onSuccess = { articles ->
             articles.forEach {
                 println(it.discordFormatDetailed())
