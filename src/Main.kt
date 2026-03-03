@@ -13,6 +13,7 @@ import sources.claude.model.ClaudeResponse
 import sources.claude.cache.HandballCacheManager
 import scheduler.FeedKrakeScheduler
 import scheduler.config.FeedKrakeConfig
+import scheduler.api.FeedKrakeApiServer
 
 fun main(args: Array<String>) {
     // ══════════════════════════════════════════════════════════════════════════
@@ -21,6 +22,17 @@ fun main(args: Array<String>) {
     when (args.getOrNull(0)) {
         "--scheduler", "-s" -> {
             startScheduler()
+            return
+        }
+        "--api" -> {
+            val port = args.getOrNull(1)?.toIntOrNull() ?: 8080
+            startApiServer(port)
+            return
+        }
+        "--server" -> {
+            // Beides: Scheduler + API
+            val port = args.getOrNull(1)?.toIntOrNull() ?: 8080
+            startFullServer(port)
             return
         }
         "--config", "-c" -> {
@@ -56,10 +68,14 @@ fun interactiveMenu() {
     ╔═══════════════════════════════════════╗
     ║        🐙 FeedKrake - Menü            ║
     ╠═══════════════════════════════════════╣
-    ║  1. Scheduler starten                 ║
-    ║  2. Konfiguration anzeigen            ║
-    ║  3. Handball Test                     ║
-    ║  4. PUBG Stats Loop                   ║
+    ║  1. 🕐 Scheduler starten              ║
+    ║  2. 🌐 API Server starten             ║
+    ║  3. 🚀 Vollständiger Server           ║
+    ║     (Scheduler + API)                 ║
+    ║                                       ║
+    ║  4. 📋 Konfiguration anzeigen         ║
+    ║  5. 🤾 Handball Test                  ║
+    ║  6. 🎮 PUBG Stats Loop                ║
     ║                                       ║
     ║  0. Beenden                           ║
     ╚═══════════════════════════════════════╝
@@ -68,9 +84,11 @@ fun interactiveMenu() {
 
         when (readlnOrNull()?.trim()) {
             "1" -> startScheduler()
-            "2" -> showConfig()
-            "3" -> testClaudeHandball()
-            "4" -> runPubgLoop()
+            "2" -> startApiServer()
+            "3" -> startFullServer()
+            "4" -> showConfig()
+            "5" -> testClaudeHandball()
+            "6" -> runPubgLoop()
             "0", "exit" -> {
                 println("Auf Wiedersehen!")
                 return
@@ -93,6 +111,40 @@ fun startScheduler() {
         scheduler.stop()
     })
 
+    scheduler.start()
+}
+
+fun startApiServer(port: Int = 8080) {
+    println("🌐 Starte FeedKrake API Server auf Port $port...")
+    val apiServer = FeedKrakeApiServer(port)
+
+    Runtime.getRuntime().addShutdownHook(Thread {
+        println("\n👋 API Server wird beendet...")
+        apiServer.stop()
+    })
+
+    apiServer.start()
+
+    // Halte den Thread am Leben
+    Thread.currentThread().join()
+}
+
+fun startFullServer(port: Int = 8080) {
+    println("🚀 Starte FeedKrake (Scheduler + API)...")
+
+    val scheduler = FeedKrakeScheduler()
+    val apiServer = FeedKrakeApiServer(port, scheduler)
+
+    Runtime.getRuntime().addShutdownHook(Thread {
+        println("\n👋 FeedKrake wird beendet...")
+        apiServer.stop()
+        scheduler.stop()
+    })
+
+    // API Server im Hintergrund starten
+    Thread { apiServer.start() }.start()
+
+    // Scheduler im Vordergrund
     scheduler.start()
 }
 
@@ -130,6 +182,8 @@ fun printHelp() {
 
     Optionen:
       --scheduler, -s    Scheduler starten (Dauerbetrieb)
+      --api [PORT]       Nur API Server starten (Standard: 8080)
+      --server [PORT]    Scheduler + API Server (empfohlen!)
       --config, -c       Konfiguration anzeigen
       --handball         Handball Test ausführen
       --pubg             PUBG Stats Loop starten
