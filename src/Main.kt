@@ -6,110 +6,128 @@ import sources.heise.queries.KeywordSearchQueryConfig
 import sources.heise.queries.LatestArticlesQuery
 import sources.heise.queries.LatestArticlesQueryConfig
 
-fun main() {
-    testHeiseFeed()
+fun main(args: Array<String>) {
+    // Falls Argument übergeben, direkt ausführen
+    if (args.isNotEmpty()) {
+        runModule(args[0])
+        return
+    }
+
+    // Interaktives Menü
+    while (true) {
+        printMenu()
+        val input = readlnOrNull()?.trim() ?: break
+
+        if (input == "0" || input.equals("exit", ignoreCase = true)) {
+            println("Auf Wiedersehen!")
+            break
+        }
+
+        runModule(input)
+        println("\n[Enter drücken für Menü...]")
+        readlnOrNull()
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Heise RSS Feed Test
+// Menü
 // ══════════════════════════════════════════════════════════════════════════════
 
-fun testHeiseFeed() {
-    println("═══════════════════════════════════════")
-    println("   📰 Heise RSS Feed Test")
-    println("═══════════════════════════════════════")
+fun printMenu() {
+    println("""
 
-    // 1. Heise Online (Alle News)
-    println("\n── Heise Online (Alle News) ───────────")
-    val heiseOnline = HeiseSource(HeiseModuleConfig(
+    ╔═══════════════════════════════════════╗
+    ║        🐙 FeedKrake - Menü            ║
+    ╠═══════════════════════════════════════╣
+    ║  1. Heise RSS Feed                    ║
+    ║  2. Heise Security                    ║
+    ║  3. Heise Developer                   ║
+    ║  4. Heise Keyword-Suche               ║
+    ║                                       ║
+    ║  0. Beenden                           ║
+    ╚═══════════════════════════════════════╝
+
+    Auswahl: """.trimIndent())
+}
+
+fun runModule(input: String) {
+    when (input.lowercase()) {
+        "1", "heise" -> testHeiseOnline()
+        "2", "security" -> testHeiseSecurity()
+        "3", "developer" -> testHeiseDeveloper()
+        "4", "search" -> testHeiseSearch()
+        else -> println("❌ Unbekannte Auswahl: $input")
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Heise Module
+// ══════════════════════════════════════════════════════════════════════════════
+
+fun testHeiseOnline() {
+    println("\n── 📰 Heise Online ────────────────────")
+    val source = HeiseSource(HeiseModuleConfig(
         feed = HeiseFeed.ALLE,
         maxArticles = 10,
         includeSponsored = false
     ))
 
-    heiseOnline.fetchArticles().fold(
+    source.fetchArticles().fold(
         onSuccess = { articles ->
-            println("📡 **${HeiseFeed.ALLE.displayName}** - ${articles.size} Artikel")
-            println("```")
+            println("📡 ${HeiseFeed.ALLE.displayName} - ${articles.size} Artikel\n")
             articles.forEach { println(it.discordFormat()) }
-            println("```")
         },
-        onFailure = { error ->
-            println("❌ Fehler: ${error.message}")
-        }
+        onFailure = { println("❌ Fehler: ${it.message}") }
     )
+}
 
-    // 2. Security News
-    println("\n── Heise Security ─────────────────────")
-    val heiseSecurity = HeiseSource(HeiseModuleConfig(
+fun testHeiseSecurity() {
+    println("\n── 🔒 Heise Security ──────────────────")
+    val source = HeiseSource(HeiseModuleConfig(
         feed = HeiseFeed.SECURITY,
-        maxArticles = 5
+        maxArticles = 10
     ))
 
-    heiseSecurity.fetchArticles().fold(
+    source.fetchArticles().fold(
         onSuccess = { articles ->
-            println("🔒 **${HeiseFeed.SECURITY.displayName}** - ${articles.size} Artikel")
-            println("```")
+            println("🔒 ${HeiseFeed.SECURITY.displayName} - ${articles.size} Artikel\n")
             articles.forEach { println(it.discordFormat()) }
-            println("```")
         },
-        onFailure = { error ->
-            println("❌ Fehler: ${error.message}")
-        }
+        onFailure = { println("❌ Fehler: ${it.message}") }
     )
+}
 
-    // 3. Developer News
-    println("\n── Heise Developer ────────────────────")
-    val heiseDev = HeiseSource(HeiseModuleConfig(
+fun testHeiseDeveloper() {
+    println("\n── 💻 Heise Developer ─────────────────")
+    val source = HeiseSource(HeiseModuleConfig(
         feed = HeiseFeed.DEVELOPER,
-        maxArticles = 5
+        maxArticles = 10
     ))
 
-    heiseDev.fetchArticles().fold(
+    source.fetchArticles().fold(
         onSuccess = { articles ->
-            println("💻 **${HeiseFeed.DEVELOPER.displayName}** - ${articles.size} Artikel")
-            println("```")
+            println("💻 ${HeiseFeed.DEVELOPER.displayName} - ${articles.size} Artikel\n")
             articles.forEach { println(it.discordFormat()) }
-            println("```")
         },
-        onFailure = { error ->
-            println("❌ Fehler: ${error.message}")
-        }
+        onFailure = { println("❌ Fehler: ${it.message}") }
     )
+}
 
-    // 4. Keyword-Suche
-    println("\n── Keyword-Suche: 'KI' ────────────────")
-    val searchSource = HeiseSource(HeiseModuleConfig(
+fun testHeiseSearch() {
+    print("\n🔍 Suchbegriff eingeben: ")
+    val keyword = readlnOrNull()?.trim() ?: return
+
+    val source = HeiseSource(HeiseModuleConfig(
         feed = HeiseFeed.ALLE,
         maxArticles = 50
     ))
 
-    searchSource.executeQuery(KeywordSearchQuery(KeywordSearchQueryConfig(keywords = listOf("KI")))).fold(
+    source.executeQuery(KeywordSearchQuery(KeywordSearchQueryConfig(keywords = listOf(keyword)))).fold(
         onSuccess = { articles ->
-            println("🔍 Gefunden: ${articles.size} Artikel mit 'KI'")
-            println("```")
-            articles.take(5).forEach { println(it.discordFormat()) }
-            if (articles.size > 5) println("... und ${articles.size - 5} weitere")
-            println("```")
+            println("\n🔍 ${articles.size} Artikel mit '$keyword' gefunden:\n")
+            articles.take(10).forEach { println(it.discordFormat()) }
+            if (articles.size > 10) println("\n... und ${articles.size - 10} weitere")
         },
-        onFailure = { error ->
-            println("❌ Fehler: ${error.message}")
-        }
+        onFailure = { println("❌ Fehler: ${it.message}") }
     )
-
-    // 5. Detaillierte Ansicht
-    println("\n── Detaillierte Artikel ───────────────")
-    heiseOnline.executeQuery(LatestArticlesQuery(LatestArticlesQueryConfig(limit = 3))).fold(
-        onSuccess = { articles ->
-            articles.forEach {
-                println(it.discordFormatDetailed())
-                println()
-            }
-        },
-        onFailure = { error ->
-            println("❌ Fehler: ${error.message}")
-        }
-    )
-
-    println("✅ Test abgeschlossen!")
 }
