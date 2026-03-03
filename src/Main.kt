@@ -1,12 +1,18 @@
+import scheduler.Scheduler
+import scheduler.config.SchedulerConfig
 import sources.heise.HeiseSource
 import sources.heise.config.HeiseModuleConfig
 import sources.heise.model.HeiseFeed
 import sources.heise.queries.KeywordSearchQuery
 import sources.heise.queries.KeywordSearchQueryConfig
-import sources.heise.queries.LatestArticlesQuery
-import sources.heise.queries.LatestArticlesQueryConfig
 
 fun main(args: Array<String>) {
+    // Scheduler-Modus
+    if (args.isNotEmpty() && args[0] == "--scheduler") {
+        startScheduler()
+        return
+    }
+
     // Falls Argument übergeben, direkt ausführen
     if (args.isNotEmpty()) {
         runModule(args[0])
@@ -44,6 +50,9 @@ fun printMenu() {
     ║  3. Heise Developer                   ║
     ║  4. Heise Keyword-Suche               ║
     ║                                       ║
+    ║  5. 🕐 Scheduler starten              ║
+    ║  6. 📋 Scheduler-Config anzeigen      ║
+    ║                                       ║
     ║  0. Beenden                           ║
     ╚═══════════════════════════════════════╝
 
@@ -56,8 +65,47 @@ fun runModule(input: String) {
         "2", "security" -> testHeiseSecurity()
         "3", "developer" -> testHeiseDeveloper()
         "4", "search" -> testHeiseSearch()
+        "5", "scheduler" -> startScheduler()
+        "6", "config" -> showSchedulerConfig()
         else -> println("❌ Unbekannte Auswahl: $input")
     }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Scheduler
+// ══════════════════════════════════════════════════════════════════════════════
+
+fun startScheduler() {
+    println("\n🚀 Starte FeedKrake Scheduler...")
+    println("   (Ctrl+C zum Beenden)\n")
+
+    val config = SchedulerConfig.load()
+    val scheduler = Scheduler(config)
+
+    // Shutdown Hook für sauberes Beenden
+    Runtime.getRuntime().addShutdownHook(Thread {
+        scheduler.stop()
+    })
+
+    scheduler.start()
+}
+
+fun showSchedulerConfig() {
+    println("\n📋 Scheduler-Konfiguration:")
+    println("─".repeat(50))
+
+    val config = SchedulerConfig.load()
+
+    println("Check-Interval: ${config.checkIntervalSeconds} Sekunden")
+    println("Timezone: ${config.timezone}")
+    println("\nAktive Tasks (${config.tasks.count { it.enabled }}):")
+
+    config.tasks.filter { it.enabled }.forEach { task ->
+        println("  • ${task.name} (${task.type})")
+    }
+
+    println("\n📝 Konfiguration bearbeiten:")
+    println("   src/scheduler/config/scheduler_config.txt")
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
