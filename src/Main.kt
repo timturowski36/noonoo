@@ -1,87 +1,59 @@
 import config.EnvConfig
 import outputs.discord.DiscordBot
-import sources.bf6.model.Bf6Stats
-import sources.pubg.model.PlayerStats
-import sources.bundesliga.model.TabellenEintrag
-import sources.heise.model.HeiseArticle
-import sources.claude.model.HandballResult
-import sources.claude.model.HandballResults
-import java.time.Instant
+import sources.bf6.api.Bf6ApiClient
+import sources.bundesliga.api.TabellenApiClient
+import sources.heise.api.HeiseRssClient
+import sources.heise.model.HeiseFeed
 
 fun main() {
-    println("FeedKrake - Module Demo")
+    println("🐙 FeedKrake - Alle Module ausführen")
     EnvConfig.load()
 
     val discord = DiscordBot.create()
+    val messages = mutableListOf<String>()
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PUBG Demo
+    // BF6 Stats (GameTools API - kein Key nötig)
     // ═══════════════════════════════════════════════════════════════════════════
-    val pubgStats = PlayerStats(
-        wins = 3,
-        matches = 47,
-        kills = 89,
-        deaths = 44,
-        damageDealt = 12500.0,
-        assists = 31,
-        longestKill = 312.5,
-        headshotKills = 18,
-        topTens = 21,
-        revives = 15,
-        knockdowns = 67
-    )
-
-    val pubgMessage = buildString {
-        appendLine("**🎮 PUBG Weekly Stats**")
-        appendLine("```")
-        appendLine(pubgStats.basicFormat("PhilipNC - Diese Woche:"))
-        appendLine()
-        appendLine(pubgStats.weeklyExtras())
-        appendLine("```")
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BF6 Demo
-    // ═══════════════════════════════════════════════════════════════════════════
-    val bf6Stats = Bf6Stats(
-        userName = "PhilipNC",
-        kills = 4521,
-        deaths = 2890,
-        killDeath = 1.56,
-        wins = 312,
-        losses = 245,
-        matchesPlayed = 557,
-        winPercent = "56%",
-        killAssists = 1832,
-        headShots = 1204,
-        headshotPercent = "27%",
-        revives = 892,
-        accuracy = "21.3%",
-        timePlayed = "142h 35m",
-        killsPerMatch = 8.1
-    )
+    println("\n── Battlefield 6 ──────────────────────────────")
+    val bf6Client = Bf6ApiClient()
 
     val bf6Message = buildString {
         appendLine("**🪖 Battlefield 6 Stats**")
-        appendLine("Spieler: ${bf6Stats.userName}")
-        appendLine("```")
-        appendLine(bf6Stats.discordFormat())
-        appendLine("```")
+
+        val brotrust = bf6Client.fetchStats("brotrustgaming", "pc")
+        if (brotrust != null) {
+            appendLine()
+            appendLine("**${brotrust.userName}**")
+            appendLine("```")
+            appendLine(brotrust.discordFormat())
+            appendLine("```")
+        } else {
+            appendLine("❌ brotrustgaming nicht gefunden")
+        }
+
+        val philip = bf6Client.fetchStats("philipnc", "pc")
+        if (philip != null) {
+            appendLine()
+            appendLine("**${philip.userName}**")
+            appendLine("```")
+            appendLine(philip.discordFormat())
+            appendLine("```")
+        } else {
+            appendLine("❌ philipnc nicht gefunden")
+        }
     }
+    messages.add(bf6Message)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Bundesliga Demo
+    // Bundesliga 2 - Schalke
     // ═══════════════════════════════════════════════════════════════════════════
-    val tabelle = listOf(
-        TabellenEintrag("bl1", 1, 40, "Bayern München", "FCB", 58, 22, 68, 24, 18, 2, 4, 46),
-        TabellenEintrag("bl1", 2, 7, "Bayer Leverkusen", "B04", 55, 28, 62, 24, 17, 3, 4, 34),
-        TabellenEintrag("bl1", 3, 131, "VfB Stuttgart", "VFB", 51, 32, 59, 24, 15, 5, 4, 27),
-        TabellenEintrag("bl1", 4, 16, "Borussia Dortmund", "BVB", 47, 35, 55, 24, 14, 5, 5, 20),
-        TabellenEintrag("bl1", 5, 112, "RB Leipzig", "RBL", 45, 31, 48, 24, 13, 6, 5, 17)
-    )
+    println("\n── 2. Bundesliga ──────────────────────────────")
+    val bundesligaClient = TabellenApiClient()
+    val tabelle = bundesligaClient.fetchTabelle("bl2", "2025")
 
     val bundesligaMessage = buildString {
-        appendLine("**⚽ Bundesliga Tabelle (Top 5)**")
+        appendLine("**⚽ 2. Bundesliga Tabelle**")
         appendLine("```")
         appendLine("Pl  Team                   Sp   S  U  N   Tore    Diff   Pkt")
         appendLine("─────────────────────────────────────────────────────────────")
@@ -93,91 +65,64 @@ fun main() {
         }
         appendLine("```")
     }
+    messages.add(bundesligaMessage)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Heise Demo
+    // Heise News (RSS)
     // ═══════════════════════════════════════════════════════════════════════════
-    val heiseArticles = listOf(
-        HeiseArticle(
-            title = "Linux 6.8 bringt Performance-Boost für AMD-Grafikkarten",
-            link = "https://heise.de/news/linux-68",
-            description = "Der neue Kernel verbessert die Unterstützung für RDNA3-GPUs erheblich...",
-            pubDate = Instant.now().minusSeconds(3600),
-            guid = "1"
-        ),
-        HeiseArticle(
-            title = "Kotlin 2.0: Das ändert sich für Entwickler",
-            link = "https://heise.de/news/kotlin-20",
-            description = "JetBrains hat die finale Version von Kotlin 2.0 veröffentlicht...",
-            pubDate = Instant.now().minusSeconds(7200),
-            guid = "2"
-        ),
-        HeiseArticle(
-            title = "Steam Deck 2: Valve bestätigt Entwicklung",
-            link = "https://heise.de/news/steam-deck-2",
-            description = "Gabe Newell spricht erstmals über die nächste Generation...",
-            pubDate = Instant.now().minusSeconds(10800),
-            guid = "3"
-        )
-    )
+    println("\n── Heise News ──────────────────────────────────")
+    val heiseClient = HeiseRssClient()
+    val heiseResult = heiseClient.fetchArticles(HeiseFeed.ALLE)
 
     val heiseMessage = buildString {
-        appendLine("**📰 Heise News (Letzte 3)**")
-        heiseArticles.forEach { article ->
-            appendLine("• ${article.discordFormat()}")
+        appendLine("**📰 Heise News (Letzte 10)**")
+        heiseResult.onSuccess { articles ->
+            val filtered = articles
+                .filter { !it.isSponsored }
+                .take(10)
+            filtered.forEach { article ->
+                appendLine("• ${article.discordFormat()}")
+            }
+        }.onFailure { error ->
+            appendLine("❌ Fehler: ${error.message}")
         }
     }
+    messages.add(heiseMessage)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Handball Demo
+    // PUBG Stats (nur wenn API Key vorhanden)
     // ═══════════════════════════════════════════════════════════════════════════
-    val handballResults = HandballResults(
-        team = "HSG Nordhorn-Lingen",
-        league = "2. Handball-Bundesliga",
-        season = "2025/26",
-        results = listOf(
-            HandballResult("02.03.", "HSG Nordhorn-Lingen", "TuS Ferndorf", 31, 28, isHome = true, won = true),
-            HandballResult("24.02.", "VfL Lübeck-Schwartau", "HSG Nordhorn-Lingen", 27, 29, isHome = false, won = true),
-            HandballResult("17.02.", "HSG Nordhorn-Lingen", "TV Emsdetten", 26, 26, isHome = true, won = false),
-            HandballResult("10.02.", "ThSV Eisenach", "HSG Nordhorn-Lingen", 32, 28, isHome = false, won = false),
-            HandballResult("03.02.", "HSG Nordhorn-Lingen", "ASV Hamm-Westfalen", 33, 30, isHome = true, won = true)
-        )
-    )
-
-    val handballMessage = buildString {
-        appendLine("**🤾 Handball Ergebnisse**")
-        appendLine("${handballResults.team} | ${handballResults.league}")
-        appendLine("Bilanz: ${handballResults.wins} Siege, ${handballResults.losses} Niederlagen")
-        appendLine()
-        handballResults.results.forEach { result ->
-            appendLine(result.discordFormat())
-        }
+    println("\n── PUBG ──────────────────────────────────────")
+    val pubgKey = EnvConfig.pubgApiKey()
+    if (pubgKey != null) {
+        // TODO: PUBG API aufrufen wenn Key vorhanden
+        messages.add("**🎮 PUBG Stats**\n✅ API Key konfiguriert - Stats werden geladen...")
+    } else {
+        messages.add("**🎮 PUBG Stats**\n⚠️ Kein API Key konfiguriert")
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // An Test-Channel senden
     // ═══════════════════════════════════════════════════════════════════════════
-    println("\n📤 Sende Demo-Output an Test-Channel...")
+    println("\n── Discord Output ──────────────────────────────")
 
     val fullMessage = buildString {
-        appendLine("🐙 **FeedKrake Module Demo**")
+        appendLine("🐙 **FeedKrake - Live Daten**")
         appendLine()
-        append(pubgMessage)
-        appendLine()
-        append(bf6Message)
-        appendLine()
-        append(bundesligaMessage)
-        appendLine()
-        append(heiseMessage)
-        appendLine()
-        append(handballMessage)
+        messages.forEach { msg ->
+            append(msg)
+            appendLine()
+        }
     }
 
+    println("\n📤 Sende an Test-Channel...")
     val success = discord.sendMessageToChannel("test", fullMessage)
 
     if (success) {
-        println("✅ Demo erfolgreich gesendet!")
+        println("✅ Erfolgreich gesendet!")
     } else {
-        println("❌ Fehler beim Senden")
+        println("❌ Fehler beim Senden - Webhook konfiguriert?")
+        println("\n📝 Ausgabe (lokal):")
+        println(fullMessage)
     }
 }
