@@ -6,9 +6,12 @@ out/
 *.iml
 
 # Credentials (API Keys, Tokens)
-*.txt
-*.env
-.env.*
+.env
+!.env.example
+
+# Alte Config-Dateien (deprecated)
+src/sources/*/config/*_api_key.txt
+src/outputs/discord/config/*.txt
 
 # OS
 .DS_Store

@@ -1,9 +1,13 @@
 package scheduler.api
 
 import com.sun.net.httpserver.HttpServer
+import config.EnvConfig
 import scheduler.FeedKrakeScheduler
 import scheduler.config.FeedKrakeConfig
+import scheduler.discord.DiscordWebhook
 import java.net.InetSocketAddress
+import java.net.URI
+import java.net.HttpURLConnection
 
 /**
  * Einfacher HTTP-Server für Remote-Trigger.
@@ -59,6 +63,21 @@ class FeedKrakeApiServer(
             exchange.responseBody.use { it.write(response.toByteArray()) }
         }
 
+        // GET /test/claude - Claude API Test mit Discord-Output
+        server?.createContext("/test/claude") { exchange ->
+            val channel = exchange.requestURI.query
+                ?.split("&")
+                ?.find { it.startsWith("channel=") }
+                ?.removePrefix("channel=")
+                ?: "test"
+
+            val (status, response) = runClaudeTest(channel)
+
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(status, response.toByteArray().size.toLong())
+            exchange.responseBody.use { it.write(response.toByteArray()) }
+        }
+
         // GET /jobs - Liste aller Jobs
         server?.createContext("/jobs") { exchange ->
             val jobsJson = config.jobs.joinToString(",\n    ") { job ->
@@ -82,10 +101,11 @@ class FeedKrakeApiServer(
     ║  Port: $port                                                  ║
     ║                                                               ║
     ║  Endpoints:                                                   ║
-    ║    http://localhost:$port/           - Übersicht (Browser)    ║
-    ║    http://localhost:$port/status     - Status (JSON)          ║
-    ║    http://localhost:$port/jobs       - Alle Jobs (JSON)       ║
-    ║    http://localhost:$port/trigger/X  - Job X auslösen         ║
+    ║    http://localhost:$port/              - Übersicht (Browser) ║
+    ║    http://localhost:$port/status        - Status (JSON)       ║
+    ║    http://localhost:$port/jobs          - Alle Jobs (JSON)    ║
+    ║    http://localhost:$port/trigger/X     - Job X auslösen      ║
+    ║    http://localhost:$port/test/claude   - Claude API Test     ║
     ╚═══════════════════════════════════════════════════════════════╝
         """.trimIndent())
     }
@@ -112,6 +132,112 @@ class FeedKrakeApiServer(
                 println("❌ [API] Fehler beim Trigger: ${e.message}")
             }
         }.start()
+    }
+
+    /**
+     * Führt einen Claude API Test durch und postet das Ergebnis in Discord.
+     */
+    private fun runClaudeTest(channel: String): Pair<Int, String> {
+        println("🧪 [API] Claude-Test für Channel: $channel")
+
+        // Config laden
+        EnvConfig.load()
+
+        // Discord Webhook holen
+        val webhookUrl = EnvConfig.discordWebhook(channel)
+        if (webhookUrl == null) {
+            return 400 to """{"error": "Kein Webhook für Channel '$channel' konfiguriert"}"""
+        }
+
+        // Claude API Key prüfen
+        val apiKey = EnvConfig.claudeApiKey()
+        if (apiKey == null) {
+            return 400 to """{"error": "Claude API Key nicht konfiguriert"}"""
+        }
+
+        // Claude API aufrufen
+        val prompt = "Schreibe einen kurzen, witzigen Fakt über Tintenfische (max 2 Sätze, auf Deutsch)."
+        val claudeResponse = callClaudeApi(apiKey, prompt)
+
+        if (claudeResponse == null) {
+            return 500 to """{"error": "Claude API Aufruf fehlgeschlagen"}"""
+        }
+
+        // An Discord senden
+        val discord = DiscordWebhook(webhookUrl)
+        val success = discord.sendEmbed(
+            title = "🐙 FeedKrake × Claude API Test",
+            description = """
+                **Anfrage:**
+                $prompt
+
+                **Antwort:**
+                $claudeResponse
+            """.trimIndent(),
+            color = DiscordWebhook.COLOR_BLUE,
+            footer = "Test via API Server"
+        )
+
+        return if (success) {
+            200 to """{"success": true, "channel": "$channel", "response": "${claudeResponse.replace("\"", "\\\"").replace("\n", "\\n")}"}"""
+        } else {
+            500 to """{"error": "Discord-Nachricht konnte nicht gesendet werden"}"""
+        }
+    }
+
+    /**
+     * Ruft die Claude API auf und gibt die Antwort zurück.
+     */
+    private fun callClaudeApi(apiKey: String, prompt: String): String? {
+        val apiUrl = "https://api.anthropic.com/v1/messages"
+        val model = "claude-sonnet-4-20250514"
+
+        val escapedPrompt = prompt
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+
+        val payload = """
+            {
+                "model": "$model",
+                "max_tokens": 256,
+                "messages": [
+                    {"role": "user", "content": "$escapedPrompt"}
+                ]
+            }
+        """.trimIndent()
+
+        return try {
+            val connection = URI(apiUrl).toURL().openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("x-api-key", apiKey)
+            connection.setRequestProperty("anthropic-version", "2023-06-01")
+            connection.doOutput = true
+            connection.connectTimeout = 30000
+            connection.readTimeout = 60000
+
+            connection.outputStream.use { os ->
+                os.write(payload.toByteArray())
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                val responseBody = connection.inputStream.bufferedReader().readText()
+                // Extract text from response
+                val textRegex = """"text"\s*:\s*"((?:[^"\\]|\\.)*)"""".toRegex()
+                textRegex.find(responseBody)?.groupValues?.get(1)
+                    ?.replace("\\n", "\n")
+                    ?.replace("\\\"", "\"")
+                    ?.replace("\\\\", "\\")
+            } else {
+                println("❌ [Claude] HTTP $responseCode")
+                null
+            }
+        } catch (e: Exception) {
+            println("❌ [Claude] Fehler: ${e.message}")
+            null
+        }
     }
 
     private fun buildOverviewHtml(): String {
@@ -161,11 +287,18 @@ class FeedKrakeApiServer(
 
     <div id="result"></div>
 
+    <h2>🧪 Tests</h2>
+    <p>
+        <button onclick="testClaude()">🤖 Claude API Test</button>
+        <span id="claude-result"></span>
+    </p>
+
     <h2>🔗 API Endpoints</h2>
     <ul>
         <li><a href="/status">/status</a> - Server-Status (JSON)</li>
         <li><a href="/jobs">/jobs</a> - Alle Jobs (JSON)</li>
         <li><code>/trigger/{JobName}</code> - Job manuell auslösen</li>
+        <li><a href="/test/claude?channel=test">/test/claude?channel=test</a> - Claude API Test</li>
     </ul>
 
     <script>
@@ -179,6 +312,25 @@ class FeedKrakeApiServer(
                 .catch(e => {
                     document.getElementById('result').innerHTML =
                         '<strong>❌ Fehler:</strong> ' + e;
+                });
+        }
+
+        function testClaude() {
+            document.getElementById('claude-result').innerHTML = '⏳ Läuft...';
+            fetch('/test/claude?channel=test')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('claude-result').innerHTML =
+                            '✅ Gesendet an #test';
+                    } else {
+                        document.getElementById('claude-result').innerHTML =
+                            '❌ ' + data.error;
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('claude-result').innerHTML =
+                        '❌ ' + e;
                 });
         }
     </script>
