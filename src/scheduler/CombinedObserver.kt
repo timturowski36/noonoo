@@ -240,11 +240,20 @@ class CombinedObserver(
         secondaryModules.forEach { module ->
             try {
                 val result = module.execute()
-                if (result != null && discord != null) {
-                    discord.send(result)
-                    println("   ✅ ${module.name}: Gesendet")
-                } else {
-                    println("   ℹ️ ${module.name}: Keine Ausgabe")
+                when {
+                    result == null -> {
+                        println("   ℹ️ ${module.name}: Keine Daten")
+                    }
+                    discord == null -> {
+                        println("   📋 ${module.name}: OK (kein Webhook)")
+                        // Zeige Vorschau in Konsole
+                        println(result.lines().take(5).joinToString("\n") { "      $it" })
+                        if (result.lines().size > 5) println("      ...")
+                    }
+                    else -> {
+                        discord.send(result)
+                        println("   ✅ ${module.name}: Gesendet")
+                    }
                 }
             } catch (e: Exception) {
                 println("   ❌ ${module.name}: ${e.message}")
