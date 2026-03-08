@@ -4,28 +4,50 @@ import java.io.File
 
 object PubgConfigLoader {
 
-    private const val CONFIG_DIR = "src/sources/pubg/config"
-    private const val API_KEY_FILE = "pubg_api_key.txt"
-
     fun loadApiKey(): String? {
-        val file = File("$CONFIG_DIR/$API_KEY_FILE")
-
-        if (!file.exists()) {
-            println("❌ API Key Datei nicht gefunden!")
-            println("   Bitte erstelle: $CONFIG_DIR/$API_KEY_FILE")
-            println("   Inhalt: Dein PUBG API Key (https://developer.pubg.com/)")
-            return null
+        // 1. Zuerst Umgebungsvariable prüfen
+        val envKey = System.getenv("PUBG_API_KEY")
+        if (!envKey.isNullOrBlank()) {
+            println("✅ [PUBG] API-Key aus Umgebungsvariable geladen.")
+            return envKey
         }
 
-        val apiKey = file.readText().trim()
-
-        if (apiKey.isEmpty()) {
-            println("❌ API Key Datei ist leer!")
-            println("   Bitte trage deinen API Key in $CONFIG_DIR/$API_KEY_FILE ein")
-            return null
+        // 2. Dann .env Datei im Projektroot prüfen
+        val envFile = File(".env")
+        if (envFile.exists()) {
+            val key = parseEnvFile(envFile, "PUBG_API_KEY")
+            if (!key.isNullOrBlank()) {
+                println("✅ [PUBG] API-Key aus .env geladen.")
+                return key
+            }
         }
 
-        println("✅ API Key geladen aus $CONFIG_DIR/$API_KEY_FILE")
-        return apiKey
+        // 3. Fallback: alte Datei (für Kompatibilität)
+        val legacyFile = File("src/sources/pubg/config/pubg_api_key.txt")
+        if (legacyFile.exists()) {
+            val key = legacyFile.readText().trim()
+            if (key.isNotBlank()) {
+                println("✅ [PUBG] API-Key aus legacy-Datei geladen.")
+                return key
+            }
+        }
+
+        println("❌ [PUBG] API-Key nicht gefunden!")
+        println("   Option 1: PUBG_API_KEY in .env setzen")
+        println("   Option 2: Umgebungsvariable PUBG_API_KEY setzen")
+        return null
+    }
+
+    private fun parseEnvFile(file: File, key: String): String? {
+        return file.readLines()
+            .map { it.trim() }
+            .filter { !it.startsWith("#") && it.contains("=") }
+            .map { line ->
+                val idx = line.indexOf("=")
+                line.substring(0, idx) to line.substring(idx + 1)
+            }
+            .firstOrNull { it.first == key }
+            ?.second
+            ?.trim()
     }
 }
