@@ -244,7 +244,7 @@ class HandballTableModule(
 
     override fun execute(): String? {
         val data = getTableData() ?: return null
-        return data.discordCompactFormat(teamName)
+        return data.discordFormat(teamName)  // Komplette Tabelle
     }
 
     private fun getTableData(): HandballTableData? {

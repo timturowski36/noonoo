@@ -115,10 +115,13 @@ fun runCombinedMode(
         checkIntervalMinutes = 5     // Status-Check alle 5 Min
     )
 
-    // Module die zur vollen Stunde laufen
-    observer.addModule(HandballUpcomingModule(handballTeamId, handballTeamName))
-    observer.addModule(HandballResultsModule(handballTeamId, handballTeamName))
-    observer.addModule(HandballTableModule(handballTeamId, handballTeamName))
+    // Handball-Module zeitversetzt:
+    // - Gerade Stunde (14:00, 16:00, ...): Ergebnisse
+    // - Halbe Stunde (:30): Nächste Spiele
+    // - Ungerade Stunde (15:00, 17:00, ...): Tabelle (komplett)
+    observer.addModule(HandballResultsModule(handballTeamId, handballTeamName), minuteOffset = 0, evenHoursOnly = true)
+    observer.addModule(HandballUpcomingModule(handballTeamId, handballTeamName), minuteOffset = 30)
+    observer.addModule(HandballTableModule(handballTeamId, handballTeamName), minuteOffset = 0, oddHoursOnly = true)
 
     // TODO: Weitere Module hinzufügen:
     // observer.addModule(BundesligaTableModule(...))
