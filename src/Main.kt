@@ -1,241 +1,64 @@
-import outputs.discord.DiscordBot
-import sources.`pubg-api`.api.PubgApiClient
-import sources.bf6.api.Bf6ApiClient
-import sources.bf6.config.Bf6SnapshotManager
-import sources.pubg.config.PubgConfigLoader
-import sources.claude.api.ClaudeApiClient
-import sources.claude.config.ClaudeConfigLoader
-import sources.claude.prompts.PromptContexts
-import sources.claude.model.HandballSchedule
-import sources.claude.model.HandballResults
-import sources.claude.model.HandballTable
-import sources.claude.model.ClaudeResponse
-import sources.claude.cache.HandballCacheManager
+import sources.heise.HeiseSource
 
 fun main() {
-    // ══════════════════════════════════════════════════════════════════════════
-    // Claude API + Handball Test (zum Testen auskommentieren/einkommentieren)
-    // ══════════════════════════════════════════════════════════════════════════
-    testClaudeHandball()
-    return  // Beende hier für den Test, entfernen für normalen Betrieb
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // PUBG Stats Loop (normaler Betrieb)
-    // ══════════════════════════════════════════════════════════════════════════
     println("═══════════════════════════════════════")
-    println("       🎮 FeedKrake - Auto Stats")
+    println("   📰 Heise RSS Module - Demo")
     println("═══════════════════════════════════════")
 
-    val bot = DiscordBot.create()
-    val channel = "allgemein"
-    val platform = "steam"
-    val players = listOf("brotrustgaming", "philipnc", "chrissi1970")
-    val bf6Players = listOf("brotrustgaming", "philipnc")
-    val bf6Client = Bf6ApiClient()
-    val bf6Snapshots = Bf6SnapshotManager()
+    // ─── Standard News ───────────────────────────────────────────────────────
+    println("\n── 📰 Heise Online (Top 5) ─────────────")
+    HeiseSource.news(5).fetchArticles().fold(
+        onSuccess = { articles ->
+            articles.forEach { println(it.discordFormat()) }
+        },
+        onFailure = { println("❌ Fehler: ${it.message}") }
+    )
 
-    while (true) {
-        val timestamp = java.time.LocalDateTime
-            .now(java.time.ZoneId.of("Europe/Berlin"))
-            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
-        println("\n[$timestamp] ── Starte Stats-Update ──")
-
-        val apiKey = PubgConfigLoader.loadApiKey()
-        if (apiKey == null) {
-            println("❌ API Key nicht gefunden. Nächster Versuch in 15 Minuten...")
-            Thread.sleep(15 * 60 * 1_000L)
-            continue
-        }
-
-        val client = PubgApiClient(apiKey)
-
-        for (playerName in players) {
-            println("\n── $playerName ──────────────────────────")
-
-            val accountId = client.fetchAccountId(playerName, platform)
-            if (accountId == null) {
-                println("❌ Account-ID für $playerName nicht gefunden, überspringe...")
-                continue
+    // ─── KI/AI News ──────────────────────────────────────────────────────────
+    println("\n── 🤖 KI News ──────────────────────────")
+    HeiseSource.ki(5).fold(
+        onSuccess = { articles ->
+            if (articles.isEmpty()) {
+                println("Keine KI-Artikel gefunden")
+            } else {
+                articles.forEach { println(it.discordFormat()) }
             }
-            println("✅ Account-ID gefunden: $accountId")
+        },
+        onFailure = { println("❌ Fehler: ${it.message}") }
+    )
 
-            Thread.sleep(2_000L)
+    // ─── Security News ───────────────────────────────────────────────────────
+    println("\n── 🔒 Security News ────────────────────")
+    HeiseSource.security(5).fetchArticles().fold(
+        onSuccess = { articles ->
+            articles.forEach { println(it.discordFormat()) }
+        },
+        onFailure = { println("❌ Fehler: ${it.message}") }
+    )
 
-            val stats12h = client.fetchRecentStats(platform, accountId, hours = 12)
-            println("12h Stats: ${stats12h?.extendedSummary() ?: "null"}")
-
-            Thread.sleep(2_000L)
-
-            val hoursWeek = calculateHoursSinceMonday()
-            val statsWeek = client.fetchRecentStats(platform, accountId, hours = hoursWeek, maxMatches = 100)
-            println("Wochen Stats: ${statsWeek?.extendedSummary() ?: "null"}")
-
-            val message = buildString {
-                appendLine("🎮 Player: $playerName (Steam)")
-                appendLine()
-                appendLine(
-                    stats12h?.basicFormat("📊 Tagesstatistik:") ?: "📊 Tagesstatistik:\nKeine Matches in den letzten 12h"
-                )
-                appendLine()
-                appendLine(
-                    statsWeek?.basicFormat("📅 Wochenstatistik:") ?: "📅 Wochenstatistik:\nKeine Matches diese Woche"
-                )
-                appendLine()
-                if (statsWeek != null) {
-                    appendLine(statsWeek.weeklyExtras())
-                    appendLine()
-                }
-                append("🕐 Stand: $timestamp")
+    // ─── Gaming News ─────────────────────────────────────────────────────────
+    println("\n── 🎮 Gaming News ──────────────────────")
+    HeiseSource.gaming(5).fold(
+        onSuccess = { articles ->
+            if (articles.isEmpty()) {
+                println("Keine Gaming-Artikel gefunden")
+            } else {
+                articles.forEach { println(it.discordFormat()) }
             }
+        },
+        onFailure = { println("❌ Fehler: ${it.message}") }
+    )
 
-            println("📤 Sende Stats für $playerName an #$channel ...")
-            val success = bot.sendMessageToChannel(channel, message)
-            println(if (success) "✅ Gesendet." else "❌ Fehler beim Senden – Webhook prüfen.")
+    // ─── Developer News ──────────────────────────────────────────────────────
+    println("\n── 💻 Developer News ───────────────────")
+    HeiseSource.developer(5).fetchArticles().fold(
+        onSuccess = { articles ->
+            articles.forEach { println(it.discordFormat()) }
+        },
+        onFailure = { println("❌ Fehler: ${it.message}") }
+    )
 
-            // Kurze Pause zwischen den Spielern (nur Rate Limit, kein langes Warten mehr)
-            if (playerName != players.last()) {
-                println("⏸️ Warte 5 Sekunden vor dem nächsten Spieler...")
-                Thread.sleep(5_000L)
-            }
-        }
-
-        // Nach allen Spielern: 30 Minuten warten
-        println("\n✅ Alle Spieler abgearbeitet. Nächstes Update in 30 Minuten...")
-        Thread.sleep(30 * 60 * 1_000L)
-    }
-}
-
-fun calculateHoursSinceMonday(): Int {
-    val now = java.time.LocalDateTime.now(java.time.ZoneId.of("Europe/Berlin"))
-    val lastMonday = if (now.dayOfWeek == java.time.DayOfWeek.MONDAY && now.hour >= 6) {
-        now.toLocalDate()
-    } else {
-        now.toLocalDate().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
-    }
-    val weekStart = lastMonday.atTime(6, 0)
-    return java.time.temporal.ChronoUnit.HOURS.between(weekStart, now).toInt().coerceAtLeast(1)
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Claude API + Handball Test
-// ══════════════════════════════════════════════════════════════════════════════
-
-fun testClaudeHandball() {
+    println("\n═══════════════════════════════════════")
+    println("   ✅ Demo abgeschlossen")
     println("═══════════════════════════════════════")
-    println("   🤾 Claude API + Handball Test")
-    println("═══════════════════════════════════════")
-
-    // Cache-Manager initialisieren
-    val cache = HandballCacheManager()
-    cache.printCacheStatus()
-
-    // 1. API Key laden (nur wenn API-Aufrufe nötig)
-    val needsApi = !cache.hasScheduleCache() || !cache.hasResultsCache() || !cache.hasTableCache()
-
-    val client: ClaudeApiClient? = if (needsApi) {
-        val apiKey = ClaudeConfigLoader.loadApiKey()
-        if (apiKey == null) {
-            println("❌ Claude API Key nicht gefunden!")
-            println("   Bitte Key in: src/sources/claude/config/claude_api_key.txt ablegen")
-            return
-        }
-        ClaudeApiClient(apiKey)
-    } else {
-        println("\n✅ Alle Daten aus Cache verfügbar - keine API-Aufrufe nötig!")
-        null
-    }
-
-    val handballUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/spielplan"
-    val tableUrl = "https://www.handball.net/mannschaften/handball4all.westfalen.1309001/tabelle"
-
-    // 2. Nächste Spiele abfragen (oder aus Cache laden)
-    println("\n── Spielplan... ───────────────────────")
-    val scheduleResponse: ClaudeResponse? = if (cache.hasScheduleCache()) {
-        cache.loadScheduleJson()?.let { ClaudeResponse.fromCache(it) }
-    } else {
-        val response = client?.extractFromWebpage(
-            url = handballUrl,
-            context = PromptContexts.HANDBALL_SCHEDULE
-        )
-        response?.extractJsonBlock()?.let { cache.saveSchedule(it) }
-        response
-    }
-
-    if (scheduleResponse != null) {
-        val schedule = HandballSchedule.fromResponse(scheduleResponse)
-        if (schedule != null) {
-            println(schedule.discordFormat())
-        } else {
-            println("❌ Konnte Spielplan nicht parsen")
-        }
-    } else {
-        println("❌ Keine Daten verfügbar")
-    }
-
-    // 3. Ergebnisse abfragen (oder aus Cache laden)
-    println("\n── Ergebnisse... ──────────────────────")
-    val resultsResponse: ClaudeResponse? = if (cache.hasResultsCache()) {
-        cache.loadResultsJson()?.let { ClaudeResponse.fromCache(it) }
-    } else {
-        val response = client?.extractFromWebpage(
-            url = handballUrl,
-            context = PromptContexts.HANDBALL_RESULTS
-        )
-        response?.extractJsonBlock()?.let { cache.saveResults(it) }
-        response
-    }
-
-    if (resultsResponse != null) {
-        val results = HandballResults.fromResponse(resultsResponse)
-        if (results != null) {
-            println(results.discordFormat())
-        } else {
-            println("❌ Konnte Ergebnisse nicht parsen")
-        }
-    } else {
-        println("❌ Keine Daten verfügbar")
-    }
-
-    // 4. Tabelle abfragen (oder aus Cache laden)
-    println("\n── Tabelle... ─────────────────────────")
-    val tableResponse: ClaudeResponse? = if (cache.hasTableCache()) {
-        cache.loadTableJson()?.let { ClaudeResponse.fromCache(it) }
-    } else {
-        val response = client?.extractFromWebpage(
-            url = tableUrl,
-            context = PromptContexts.HANDBALL_TABLE
-        )
-        response?.extractJsonBlock()?.let { cache.saveTable(it) }
-        response
-    }
-
-    if (tableResponse != null) {
-        val table = HandballTable.fromResponse(tableResponse)
-        if (table != null) {
-            println(table.discordFormat())
-        } else {
-            println("❌ Konnte Tabelle nicht parsen")
-        }
-    } else {
-        println("❌ Keine Daten verfügbar")
-    }
-
-    // 5. Kosten-Zusammenfassung (nur für API-Aufrufe)
-    val apiResponses = listOfNotNull(scheduleResponse, resultsResponse, tableResponse)
-        .filter { !it.fromCache }
-
-    if (apiResponses.isNotEmpty()) {
-        println("\n── Kosten-Zusammenfassung ─────────────")
-        val totalInput = apiResponses.sumOf { it.inputTokens }
-        val totalOutput = apiResponses.sumOf { it.outputTokens }
-
-        println("Input Tokens:  $totalInput")
-        println("Output Tokens: $totalOutput")
-        println("Geschätzte Kosten (Sonnet): ~$${"%.4f".format((totalInput * 3.0 + totalOutput * 15.0) / 1_000_000)}")
-        println("Geschätzte Kosten (Haiku):  ~$${"%.4f".format((totalInput * 0.8 + totalOutput * 4.0) / 1_000_000)}")
-    } else {
-        println("\n── Keine API-Kosten (alles aus Cache) ─")
-    }
-
-    println("\n✅ Test abgeschlossen!")
 }
