@@ -136,7 +136,7 @@ class FeedKrakeApiServer(
         // Einfache Trigger-Nachricht
         Thread {
             try {
-                val webhook = scheduler.discord.DiscordWebhook(webhookUrl)
+                val webhook = DiscordWebhook(webhookUrl)
                 webhook.sendEmbed(
                     title = "🔔 ${job.name} (manuell)",
                     description = "Job wurde manuell über API getriggert.\nModul: ${job.module}",

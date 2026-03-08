@@ -4,9 +4,6 @@ import outputs.discord.DiscordBot
 import scheduler.config.FeedKrakeConfig
 import scheduler.config.JobConfig
 import scheduler.discord.DiscordWebhook
-import sources.heise.HeiseSource
-import sources.heise.config.HeiseModuleConfig
-import sources.heise.model.HeiseFeed
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
@@ -104,8 +101,9 @@ class FeedKrakeScheduler {
 
             // Wochentag(e) um HH:MM
             else -> {
-                val (days, time) = parseWeeklySchedule(schedule) ?: return (false to null)
-                if (days == null || time == null) return false
+                val parsed = parseWeeklySchedule(schedule) ?: return false
+                val days = parsed.first ?: return false
+                val time = parsed.second ?: return false
 
                 val isCorrectDay = now.dayOfWeek in days
                 val targetTime = now.toLocalDate().atTime(time)
@@ -187,9 +185,9 @@ class FeedKrakeScheduler {
 
     private fun runModule(job: JobConfig): String? {
         return when (job.module.lowercase()) {
-            "heise.news" -> fetchHeise(HeiseFeed.ALLE, job.getIntOption("max", 10))
-            "heise.security" -> fetchHeise(HeiseFeed.SECURITY, job.getIntOption("max", 10))
-            "heise.developer" -> fetchHeise(HeiseFeed.DEVELOPER, job.getIntOption("max", 10))
+            "heise.news" -> "📰 Heise News\n*(Noch nicht implementiert - Heise Modul fehlt)*"
+            "heise.security" -> "🔒 Heise Security\n*(Noch nicht implementiert - Heise Modul fehlt)*"
+            "heise.developer" -> "💻 Heise Developer\n*(Noch nicht implementiert - Heise Modul fehlt)*"
             "handball.tabelle" -> "🤾 Handball Tabelle\n*(Noch nicht implementiert - benötigt Claude API)*"
             "handball.spiele" -> "🤾 Handball Spielplan\n*(Noch nicht implementiert - benötigt Claude API)*"
             "handball.ergebnisse" -> "🤾 Handball Ergebnisse\n*(Noch nicht implementiert - benötigt Claude API)*"
@@ -200,25 +198,6 @@ class FeedKrakeScheduler {
                 null
             }
         }
-    }
-
-    private fun fetchHeise(feed: HeiseFeed, maxArticles: Int): String? {
-        val source = HeiseSource(HeiseModuleConfig(
-            feed = feed,
-            maxArticles = maxArticles,
-            includeSponsored = false
-        ))
-
-        return source.fetchArticles().fold(
-            onSuccess = { articles ->
-                buildString {
-                    appendLine("```")
-                    articles.forEach { appendLine(it.discordFormat()) }
-                    append("```")
-                }
-            },
-            onFailure = { null }
-        )
     }
 
     private fun getColorForModule(module: String): Int {
