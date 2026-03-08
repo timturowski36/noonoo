@@ -146,9 +146,16 @@ WICHTIG:
         val venue = extractString(json, "venue")
         val scoreHome = extractInt(json, "scoreHome")
         val scoreAway = extractInt(json, "scoreAway")
-        val isPlayed = extractBoolean(json, "isPlayed") ?: (scoreHome != null && scoreAway != null)
 
         val date = parseDateTime(dateStr, timeStr) ?: return null
+
+        // Robuste isPlayed-Ermittlung: ohne Ergebnis + Datum in Zukunft = nicht gespielt
+        val claudeIsPlayed = extractBoolean(json, "isPlayed")
+        val actuallyPlayed = when {
+            scoreHome != null && scoreAway != null -> true  // Hat Ergebnis = gespielt
+            date.isAfter(LocalDateTime.now()) -> false      // Zukunft ohne Ergebnis = nicht gespielt
+            else -> claudeIsPlayed ?: false                 // Sonst Claude vertrauen oder false
+        }
 
         return HandballMatch(
             id = "match_$index",
@@ -158,7 +165,7 @@ WICHTIG:
             venue = venue,
             scoreHome = scoreHome,
             scoreAway = scoreAway,
-            isPlayed = isPlayed
+            isPlayed = actuallyPlayed
         )
     }
 

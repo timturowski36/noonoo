@@ -221,15 +221,27 @@ class HandballCache(
         if (parts.size < 8) return null
 
         return try {
+            val date = LocalDateTime.parse(parts[1], dateTimeFormatter)
+            val scoreHome = parts[5].toIntOrNull()
+            val scoreAway = parts[6].toIntOrNull()
+
+            // Robuste isPlayed-Ermittlung: ohne Ergebnis + Datum in Zukunft = nicht gespielt
+            val cachedIsPlayed = parts[7].toBoolean()
+            val actuallyPlayed = when {
+                scoreHome != null && scoreAway != null -> true  // Hat Ergebnis = gespielt
+                date.isAfter(LocalDateTime.now()) -> false      // Zukunft ohne Ergebnis = nicht gespielt
+                else -> cachedIsPlayed                          // Sonst Cache vertrauen
+            }
+
             HandballMatch(
                 id = parts[0],
-                date = LocalDateTime.parse(parts[1], dateTimeFormatter),
+                date = date,
                 homeTeam = parts[2],
                 awayTeam = parts[3],
                 venue = parts[4].ifEmpty { null },
-                scoreHome = parts[5].toIntOrNull(),
-                scoreAway = parts[6].toIntOrNull(),
-                isPlayed = parts[7].toBoolean()
+                scoreHome = scoreHome,
+                scoreAway = scoreAway,
+                isPlayed = actuallyPlayed
             )
         } catch (e: Exception) {
             null
