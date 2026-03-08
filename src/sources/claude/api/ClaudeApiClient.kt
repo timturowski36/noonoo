@@ -116,7 +116,7 @@ WICHTIG: Antworte NUR mit validem JSON. Keine Erklärungen, kein Markdown, nur d
             webContent.title?.let { appendLine("Titel: $it") }
             appendLine()
             appendLine("=== WEBSEITEN-INHALT ===")
-            appendLine(webContent.truncatedText(12000))
+            appendLine(webContent.truncatedText(20000))  // Erhöht von 12000 auf 20000
             appendLine("=== ENDE WEBSEITEN-INHALT ===")
             appendLine()
             append(prompt)
@@ -145,7 +145,7 @@ WICHTIG: Antworte NUR mit validem JSON. Keine Erklärungen, kein Markdown, nur d
             webContent.title?.let { appendLine("Titel: $it") }
             appendLine()
             appendLine("=== WEBSEITEN-INHALT ===")
-            appendLine(webContent.truncatedText(12000))
+            appendLine(webContent.truncatedText(20000))  // Erhöht von 12000 auf 20000
             appendLine("=== ENDE WEBSEITEN-INHALT ===")
             if (additionalPrompt.isNotEmpty()) {
                 appendLine()
