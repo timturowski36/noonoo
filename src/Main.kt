@@ -102,27 +102,23 @@ fun main() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // An Test-Channel senden
+    // An Test-Channel senden (einzelne Nachrichten wegen 2000 Zeichen Limit)
     // ═══════════════════════════════════════════════════════════════════════════
     println("\n── Discord Output ──────────────────────────────")
+    println("📤 Sende ${messages.size} Nachrichten an Test-Channel...")
 
-    val fullMessage = buildString {
-        appendLine("🐙 **FeedKrake - Live Daten**")
-        appendLine()
-        messages.forEach { msg ->
-            append(msg)
-            appendLine()
+    // Header senden
+    discord.sendMessageToChannel("test", "🐙 **FeedKrake - Live Daten**")
+    Thread.sleep(500)
+
+    // Jede Nachricht einzeln senden
+    var successCount = 0
+    messages.forEach { msg ->
+        if (discord.sendMessageToChannel("test", msg)) {
+            successCount++
         }
+        Thread.sleep(500) // Rate Limit beachten
     }
 
-    println("\n📤 Sende an Test-Channel...")
-    val success = discord.sendMessageToChannel("test", fullMessage)
-
-    if (success) {
-        println("✅ Erfolgreich gesendet!")
-    } else {
-        println("❌ Fehler beim Senden - Webhook konfiguriert?")
-        println("\n📝 Ausgabe (lokal):")
-        println(fullMessage)
-    }
+    println("✅ $successCount/${messages.size} Nachrichten gesendet!")
 }
