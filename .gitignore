@@ -9,7 +9,7 @@ target/
 
 # Credentials (API Keys, Tokens)
 .env
-!.env.example
+!.env
 
 # Alte Config-Dateien (deprecated)
 input/api_key.txt

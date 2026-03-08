@@ -1,4 +1,5 @@
 import config.EnvConfig
+import java.lang.IO.println
 
 fun main(args: Array<String>) {
     println("═══════════════════════════════════════")
@@ -11,7 +12,7 @@ fun main(args: Array<String>) {
 
     // Beispiel: Discord Webhook abrufen
     println("\n── Test: Discord Webhook ──────────────")
-    val gamingWebhook = EnvConfig.discordWebhook("gaming")
+    val gamingWebhook = EnvConfig.discordWebhook("test")
     if (gamingWebhook != null) {
         println("✅ Gaming-Webhook geladen")
     }
