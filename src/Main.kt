@@ -1,4 +1,5 @@
 import config.EnvConfig
+import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
 import scheduler.HandballUpcomingModule
@@ -18,7 +19,11 @@ fun main() {
     // ═══════════════════════════════════════════════════════════════════════════
     // MODUS AUSWÄHLEN
     // ═══════════════════════════════════════════════════════════════════════════
-    val mode = "single"  // "single" = Einzeldurchlauf, "scheduler" = Multi-Module Scheduler, "observer" = Alte Observer
+    // "combined"   = PUBG prüfen + Stats alle 45 Min wenn aktiv + Module zur vollen Stunde
+    // "scheduler"  = Multi-Module Scheduler (primär/sekundär versetzt)
+    // "observer"   = Alte Observer (separate Threads)
+    // "single"     = Einmaliger Durchlauf
+    val mode = "combined"
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MODUL-KONFIGURATION
@@ -56,6 +61,13 @@ fun main() {
     }
 
     when (mode) {
+        "combined" -> runCombinedMode(
+            pubgPlayers = pubgPlayers,
+            pubgPlatform = pubgPlatform,
+            discordChannel = pubgDiscordChannel,
+            handballTeamId = handballTeamId,
+            handballTeamName = handballTeamName
+        )
         "scheduler" -> runSchedulerMode(
             handballTeamId = handballTeamId,
             handballTeamName = handballTeamName,
@@ -81,6 +93,43 @@ fun main() {
             handballDiscordChannel = handballDiscordChannel
         )
     }
+}
+
+/**
+ * Combined-Modus: PUBG prüfen, Stats alle 45 Min wenn aktiv, Module zur vollen Stunde
+ */
+fun runCombinedMode(
+    pubgPlayers: List<String>,
+    pubgPlatform: String,
+    discordChannel: String,
+    handballTeamId: String,
+    handballTeamName: String
+) {
+    val webhookUrl = EnvConfig.discordWebhook(discordChannel)
+
+    val observer = CombinedObserver(
+        pubgPlayers = pubgPlayers,
+        pubgPlatform = pubgPlatform,
+        discordWebhookUrl = webhookUrl,
+        pubgIntervalMinutes = 45,   // PUBG Stats alle 45 Min wenn jemand spielt
+        checkIntervalMinutes = 5     // Status-Check alle 5 Min
+    )
+
+    // Module die zur vollen Stunde laufen
+    observer.addModule(HandballUpcomingModule(handballTeamId, handballTeamName))
+    observer.addModule(HandballResultsModule(handballTeamId, handballTeamName))
+    observer.addModule(HandballTableModule(handballTeamId, handballTeamName))
+
+    // TODO: Weitere Module hinzufügen:
+    // observer.addModule(BundesligaTableModule(...))
+    // observer.addModule(HeiseNewsModule(...))
+
+    Runtime.getRuntime().addShutdownHook(Thread {
+        println("\n🛑 Shutdown Signal empfangen...")
+        observer.stop()
+    })
+
+    observer.start()
 }
 
 /**
