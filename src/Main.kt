@@ -1,64 +1,31 @@
-import sources.heise.HeiseSource
+import config.EnvConfig
 
-fun main() {
+fun main(args: Array<String>) {
     println("═══════════════════════════════════════")
-    println("   📰 Heise RSS Module - Demo")
+    println("   🐙 FeedKrake - Config Demo")
     println("═══════════════════════════════════════")
 
-    // ─── Standard News ───────────────────────────────────────────────────────
-    println("\n── 📰 Heise Online (Top 5) ─────────────")
-    HeiseSource.news(5).fetchArticles().fold(
-        onSuccess = { articles ->
-            articles.forEach { println(it.discordFormat()) }
-        },
-        onFailure = { println("❌ Fehler: ${it.message}") }
-    )
+    // Konfiguration laden und Status anzeigen
+    EnvConfig.load()
+    EnvConfig.printStatus()
 
-    // ─── KI/AI News ──────────────────────────────────────────────────────────
-    println("\n── 🤖 KI News ──────────────────────────")
-    HeiseSource.ki(5).fold(
-        onSuccess = { articles ->
-            if (articles.isEmpty()) {
-                println("Keine KI-Artikel gefunden")
-            } else {
-                articles.forEach { println(it.discordFormat()) }
-            }
-        },
-        onFailure = { println("❌ Fehler: ${it.message}") }
-    )
+    // Beispiel: Discord Webhook abrufen
+    println("\n── Test: Discord Webhook ──────────────")
+    val gamingWebhook = EnvConfig.discordWebhook("gaming")
+    if (gamingWebhook != null) {
+        println("✅ Gaming-Webhook geladen")
+    }
 
-    // ─── Security News ───────────────────────────────────────────────────────
-    println("\n── 🔒 Security News ────────────────────")
-    HeiseSource.security(5).fetchArticles().fold(
-        onSuccess = { articles ->
-            articles.forEach { println(it.discordFormat()) }
-        },
-        onFailure = { println("❌ Fehler: ${it.message}") }
-    )
-
-    // ─── Gaming News ─────────────────────────────────────────────────────────
-    println("\n── 🎮 Gaming News ──────────────────────")
-    HeiseSource.gaming(5).fold(
-        onSuccess = { articles ->
-            if (articles.isEmpty()) {
-                println("Keine Gaming-Artikel gefunden")
-            } else {
-                articles.forEach { println(it.discordFormat()) }
-            }
-        },
-        onFailure = { println("❌ Fehler: ${it.message}") }
-    )
-
-    // ─── Developer News ──────────────────────────────────────────────────────
-    println("\n── 💻 Developer News ───────────────────")
-    HeiseSource.developer(5).fetchArticles().fold(
-        onSuccess = { articles ->
-            articles.forEach { println(it.discordFormat()) }
-        },
-        onFailure = { println("❌ Fehler: ${it.message}") }
-    )
+    // Beispiel: API Keys prüfen
+    println("\n── Test: API Keys ─────────────────────")
+    if (EnvConfig.pubgApiKey() != null) {
+        println("✅ PUBG API Key verfügbar")
+    }
+    if (EnvConfig.claudeApiKey() != null) {
+        println("✅ Claude API Key verfügbar")
+    }
 
     println("\n═══════════════════════════════════════")
-    println("   ✅ Demo abgeschlossen")
+    println("   ✅ Config-Test abgeschlossen")
     println("═══════════════════════════════════════")
 }

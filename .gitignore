@@ -8,11 +8,15 @@ target/
 *.iml
 
 # Credentials (API Keys, Tokens)
+.env
+!.env.example
+
+# Alte Config-Dateien (deprecated)
 input/api_key.txt
 input/discord_token.txt
 input/*_accountid.txt
-*.env
-.env.*
+src/sources/*/config/*_api_key.txt
+src/outputs/discord/config/*.txt
 
 # OS
 .DS_Store
