@@ -4,6 +4,9 @@ import outputs.discord.DiscordBot
 import scheduler.config.FeedKrakeConfig
 import scheduler.config.JobConfig
 import scheduler.discord.DiscordWebhook
+import sources.heise.HeiseSource
+import sources.heise.config.HeiseModuleConfig
+import sources.heise.model.HeiseFeed
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
@@ -185,9 +188,9 @@ class FeedKrakeScheduler {
 
     private fun runModule(job: JobConfig): String? {
         return when (job.module.lowercase()) {
-            "heise.news" -> "📰 Heise News\n*(Noch nicht implementiert - Heise Modul fehlt)*"
-            "heise.security" -> "🔒 Heise Security\n*(Noch nicht implementiert - Heise Modul fehlt)*"
-            "heise.developer" -> "💻 Heise Developer\n*(Noch nicht implementiert - Heise Modul fehlt)*"
+            "heise.news" -> fetchHeise(HeiseFeed.ALLE, job.getIntOption("max", 10))
+            "heise.security" -> fetchHeise(HeiseFeed.SECURITY, job.getIntOption("max", 10))
+            "heise.developer" -> fetchHeise(HeiseFeed.DEVELOPER, job.getIntOption("max", 10))
             "handball.tabelle" -> "🤾 Handball Tabelle\n*(Noch nicht implementiert - benötigt Claude API)*"
             "handball.spiele" -> "🤾 Handball Spielplan\n*(Noch nicht implementiert - benötigt Claude API)*"
             "handball.ergebnisse" -> "🤾 Handball Ergebnisse\n*(Noch nicht implementiert - benötigt Claude API)*"
@@ -198,6 +201,25 @@ class FeedKrakeScheduler {
                 null
             }
         }
+    }
+
+    private fun fetchHeise(feed: HeiseFeed, maxArticles: Int): String? {
+        val source = HeiseSource(HeiseModuleConfig(
+            feed = feed,
+            maxArticles = maxArticles,
+            includeSponsored = false
+        ))
+
+        return source.fetchArticles().fold(
+            onSuccess = { articles ->
+                buildString {
+                    appendLine("```")
+                    articles.forEach { appendLine(it.discordFormat()) }
+                    append("```")
+                }
+            },
+            onFailure = { null }
+        )
     }
 
     private fun getColorForModule(module: String): Int {
