@@ -4,6 +4,7 @@ import sources.bf6.api.Bf6ApiClient
 import sources.bundesliga.api.TabellenApiClient
 import sources.heise.api.HeiseRssClient
 import sources.heise.model.HeiseFeed
+import sources.`pubg-api`.api.PubgApiClient
 
 fun main() {
     println("🐙 FeedKrake - Alle Module ausführen")
@@ -95,8 +96,35 @@ fun main() {
     println("\n── PUBG ──────────────────────────────────────")
     val pubgKey = EnvConfig.pubgApiKey()
     if (pubgKey != null) {
-        // TODO: PUBG API aufrufen wenn Key vorhanden
-        messages.add("**🎮 PUBG Stats**\n✅ API Key konfiguriert - Stats werden geladen...")
+        val pubgClient = PubgApiClient(pubgKey)
+        val pubgPlayers = listOf("brotrustgaming", "philipnc")
+        val platform = "steam"
+
+        val pubgMessage = buildString {
+            appendLine("**🎮 PUBG Stats (letzte 12h)**")
+
+            pubgPlayers.forEach { playerName ->
+                val accountId = pubgClient.fetchAccountId(playerName, platform)
+                if (accountId != null) {
+                    val stats = pubgClient.fetchRecentStats(platform, accountId, hours = 12)
+                    if (stats != null && stats.matches > 0) {
+                        appendLine()
+                        appendLine("**$playerName**")
+                        appendLine("```")
+                        appendLine(stats.basicFormat("📊 Letzte 12 Stunden:"))
+                        appendLine(stats.weeklyExtras())
+                        appendLine("```")
+                    } else if (stats != null) {
+                        appendLine("**$playerName** - Keine Matches in den letzten 12h")
+                    } else {
+                        appendLine("❌ $playerName - Stats konnten nicht geladen werden")
+                    }
+                } else {
+                    appendLine("❌ $playerName nicht gefunden")
+                }
+            }
+        }
+        messages.add(pubgMessage)
     } else {
         messages.add("**🎮 PUBG Stats**\n⚠️ Kein API Key konfiguriert")
     }
