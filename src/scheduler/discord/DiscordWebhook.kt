@@ -88,6 +88,5 @@ class DiscordWebhook(private val webhookUrl: String) {
         const val COLOR_BLUE = 0x5865F2
         const val COLOR_YELLOW = 0xFEE75C
         const val COLOR_ORANGE = 0xE67E22
-        const val COLOR_PURPLE = 0x9B59B6
     }
 }
