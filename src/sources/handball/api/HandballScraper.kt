@@ -24,9 +24,15 @@ class HandballScraper {
             description = "Vollständiger Handball-Spielplan (vergangene + kommende Spiele)",
             systemPrompt = """Du bist ein Handball-Daten-Assistent. Extrahiere ALLE Spiele aus dem Spielplan.
 
+WICHTIG: Die Seite zeigt ZWEI Arten von Spielen:
+1. GESPIELTE Spiele: zeigen ein Ergebnis wie "25:23" oder "30:26"
+2. KOMMENDE Spiele: zeigen eine Uhrzeit wie "15:00 Uhr" oder "18:00 Uhr" OHNE Ergebnis
+
+Du MUSST beide Arten extrahieren! Kommende Spiele erkennst du daran, dass statt "25:23" etwas wie "15:00 Uhr" steht.
+
 Antworte NUR mit validem JSON, keine Erklärungen:
 {
-  "team": "Mannschaftsname (z.B. HSG RE/OE)",
+  "team": "Mannschaftsname",
   "league": "Liga/Klasse",
   "season": "2025/26",
   "matches": [
@@ -42,7 +48,7 @@ Antworte NUR mit validem JSON, keine Erklärungen:
     },
     {
       "date": "2026-03-15",
-      "time": "18:00",
+      "time": "15:00",
       "homeTeam": "Heimteam",
       "awayTeam": "Gastteam",
       "venue": "Hallenname",
@@ -53,12 +59,11 @@ Antworte NUR mit validem JSON, keine Erklärungen:
   ]
 }
 
-WICHTIG:
-- Extrahiere ALLE Spiele, sowohl vergangene (mit Ergebnis) als auch kommende (ohne Ergebnis)
-- Datum im Format YYYY-MM-DD
-- Zeit im Format HH:MM
-- Bei gespielten Spielen: scoreHome und scoreAway als Zahlen, isPlayed: true
-- Bei kommenden Spielen: scoreHome und scoreAway als null, isPlayed: false
+REGELN:
+- Extrahiere ALLE Spiele (gespielt UND kommend)
+- Gespielt: scoreHome/scoreAway = Zahlen, isPlayed = true
+- Kommend (zeigt "XX:XX Uhr"): scoreHome/scoreAway = null, isPlayed = false, time = die angezeigte Uhrzeit
+- Datum im Format YYYY-MM-DD, Zeit im Format HH:MM
 - Sortiere nach Datum aufsteigend""",
             userPrefix = "",
             userSuffix = ""
