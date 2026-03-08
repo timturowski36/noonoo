@@ -205,12 +205,12 @@ class CombinedObserver(
             try {
                 val accountId = client.fetchAccountId(playerName, pubgPlatform) ?: return@forEach
 
-                // Hole Stats der letzten 12 Stunden
-                val recentStats = client.fetchRecentStats(pubgPlatform, accountId, hours = 12, maxMatches = 20)
-                val lifetimeWins = client.fetchLifetimeWins(pubgPlatform, accountId)
+                // Hole Tages- und Wochenstats
+                val dailyStats = client.fetchRecentStats(pubgPlatform, accountId, hours = 24, maxMatches = 30)
+                val weeklyStats = client.fetchRecentStats(pubgPlatform, accountId, hours = 168, maxMatches = 50)
 
-                if (recentStats != null) {
-                    val message = formatPubgStats(playerName, recentStats, lifetimeWins)
+                if (dailyStats != null || weeklyStats != null) {
+                    val message = formatPubgStats(playerName, dailyStats, weeklyStats)
                     discord?.send(message)
                     println("   ✅ Stats für $playerName gesendet")
                 }
@@ -223,22 +223,27 @@ class CombinedObserver(
     /**
      * Formatiert PUBG Stats für Discord.
      */
-    private fun formatPubgStats(playerName: String, stats: PlayerStats, lifetimeWins: Int?): String {
+    private fun formatPubgStats(
+        playerName: String,
+        dailyStats: PlayerStats?,
+        weeklyStats: PlayerStats?
+    ): String {
         return buildString {
-            appendLine("🎮 **PUBG Stats: $playerName** (letzte 12h)")
-            appendLine("```")
-            appendLine("Matches: ${stats.matches}")
-            appendLine("Wins: ${stats.wins}")
-            appendLine("K/D: ${stats.kdFormatted()}")
-            appendLine("Kills: ${stats.kills}   Assists: ${stats.assists}")
-            appendLine("Ø Schaden: ${stats.avgDamageFormatted()}")
-            appendLine("Top 10: ${stats.topTens} (${String.format("%.0f", stats.topTenRate)}%)")
-            if (lifetimeWins != null) {
-                appendLine("─".repeat(25))
-                appendLine("Lifetime Wins: $lifetimeWins")
+            appendLine("🎮 **Player: $playerName** (${pubgPlatform.replaceFirstChar { it.uppercase() }})")
+
+            // Tagesstatistik
+            if (dailyStats != null && dailyStats.matches > 0) {
+                appendLine(dailyStats.basicFormat("📅 **Tagesstatistik:**"))
             }
-            appendLine("```")
-            append("🕐 ${LocalDateTime.now().format(dateTimeFormatter)}")
+
+            // Wochenstatistik
+            if (weeklyStats != null && weeklyStats.matches > 0) {
+                appendLine(weeklyStats.basicFormat("📆 **Wochenstatistik:**"))
+                append(weeklyStats.weeklyExtras())
+            }
+
+            appendLine()
+            append("🕐 Stand: ${LocalDateTime.now().format(dateTimeFormatter)}")
         }
     }
 
