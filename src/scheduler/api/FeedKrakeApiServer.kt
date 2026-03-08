@@ -5,6 +5,7 @@ import config.EnvConfig
 import scheduler.FeedKrakeScheduler
 import scheduler.config.FeedKrakeConfig
 import scheduler.discord.DiscordWebhook
+import test.ModuleTestRunner
 import java.net.InetSocketAddress
 import java.net.URI
 import java.net.HttpURLConnection
@@ -63,6 +64,18 @@ class FeedKrakeApiServer(
             exchange.responseBody.use { it.write(response.toByteArray()) }
         }
 
+        // GET /test/all - Alle Module testen
+        server?.createContext("/test/all") { exchange ->
+            Thread {
+                ModuleTestRunner.runAllTests()
+            }.start()
+
+            val response = """{"started": true, "message": "Modul-Tests gestartet, Ergebnisse werden an #test gesendet"}"""
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, response.toByteArray().size.toLong())
+            exchange.responseBody.use { it.write(response.toByteArray()) }
+        }
+
         // GET /test/claude - Claude API Test mit Discord-Output
         server?.createContext("/test/claude") { exchange ->
             val channel = exchange.requestURI.query
@@ -105,6 +118,7 @@ class FeedKrakeApiServer(
     ║    http://localhost:$port/status        - Status (JSON)       ║
     ║    http://localhost:$port/jobs          - Alle Jobs (JSON)    ║
     ║    http://localhost:$port/trigger/X     - Job X auslösen      ║
+    ║    http://localhost:$port/test/all      - Alle Module testen  ║
     ║    http://localhost:$port/test/claude   - Claude API Test     ║
     ╚═══════════════════════════════════════════════════════════════╝
         """.trimIndent())
@@ -289,8 +303,9 @@ class FeedKrakeApiServer(
 
     <h2>🧪 Tests</h2>
     <p>
+        <button onclick="testAll()">🧪 Alle Module testen</button>
         <button onclick="testClaude()">🤖 Claude API Test</button>
-        <span id="claude-result"></span>
+        <span id="test-result"></span>
     </p>
 
     <h2>🔗 API Endpoints</h2>
@@ -298,7 +313,8 @@ class FeedKrakeApiServer(
         <li><a href="/status">/status</a> - Server-Status (JSON)</li>
         <li><a href="/jobs">/jobs</a> - Alle Jobs (JSON)</li>
         <li><code>/trigger/{JobName}</code> - Job manuell auslösen</li>
-        <li><a href="/test/claude?channel=test">/test/claude?channel=test</a> - Claude API Test</li>
+        <li><a href="/test/all">/test/all</a> - Alle Module testen</li>
+        <li><a href="/test/claude?channel=test">/test/claude</a> - Claude API Test</li>
     </ul>
 
     <script>
@@ -315,21 +331,35 @@ class FeedKrakeApiServer(
                 });
         }
 
+        function testAll() {
+            document.getElementById('test-result').innerHTML = '⏳ Tests gestartet...';
+            fetch('/test/all')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('test-result').innerHTML =
+                        '✅ Tests laufen - siehe #test Channel';
+                })
+                .catch(e => {
+                    document.getElementById('test-result').innerHTML =
+                        '❌ ' + e;
+                });
+        }
+
         function testClaude() {
-            document.getElementById('claude-result').innerHTML = '⏳ Läuft...';
+            document.getElementById('test-result').innerHTML = '⏳ Claude-Test läuft...';
             fetch('/test/claude?channel=test')
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        document.getElementById('claude-result').innerHTML =
+                        document.getElementById('test-result').innerHTML =
                             '✅ Gesendet an #test';
                     } else {
-                        document.getElementById('claude-result').innerHTML =
+                        document.getElementById('test-result').innerHTML =
                             '❌ ' + data.error;
                     }
                 })
                 .catch(e => {
-                    document.getElementById('claude-result').innerHTML =
+                    document.getElementById('test-result').innerHTML =
                         '❌ ' + e;
                 });
         }

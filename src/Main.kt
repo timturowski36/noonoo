@@ -14,6 +14,7 @@ import sources.claude.cache.HandballCacheManager
 import scheduler.FeedKrakeScheduler
 import scheduler.config.FeedKrakeConfig
 import scheduler.api.FeedKrakeApiServer
+import test.ModuleTestRunner
 
 fun main(args: Array<String>) {
     // ══════════════════════════════════════════════════════════════════════════
@@ -51,6 +52,10 @@ fun main(args: Array<String>) {
             testClaudeHandball()
             return
         }
+        "--test" -> {
+            ModuleTestRunner.runAllTests()
+            return
+        }
     }
 
     // Standard: Interaktives Menü
@@ -76,6 +81,7 @@ fun interactiveMenu() {
     ║  4. 📋 Konfiguration anzeigen         ║
     ║  5. 🤾 Handball Test                  ║
     ║  6. 🎮 PUBG Stats Loop                ║
+    ║  7. 🧪 Alle Module testen             ║
     ║                                       ║
     ║  0. Beenden                           ║
     ╚═══════════════════════════════════════╝
@@ -89,6 +95,7 @@ fun interactiveMenu() {
             "4" -> showConfig()
             "5" -> testClaudeHandball()
             "6" -> runPubgLoop()
+            "7" -> ModuleTestRunner.runAllTests()
             "0", "exit" -> {
                 println("Auf Wiedersehen!")
                 return
@@ -185,6 +192,7 @@ fun printHelp() {
       --api [PORT]       Nur API Server starten (Standard: 8080)
       --server [PORT]    Scheduler + API Server (empfohlen!)
       --config, -c       Konfiguration anzeigen
+      --test             Alle Module testen (sendet an #test)
       --handball         Handball Test ausführen
       --pubg             PUBG Stats Loop starten
       --help, -h         Diese Hilfe anzeigen
