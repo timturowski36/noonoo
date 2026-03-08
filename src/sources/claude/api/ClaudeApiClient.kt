@@ -61,7 +61,7 @@ class ClaudeApiClient(
                     }
                     errorBody.contains("invalid_api_key") || errorBody.contains("authentication") -> {
                         println("   🔑 API-Key ungültig oder abgelaufen!")
-                        println("   → Prüfe: src/sources/claude/config/claude_api_key.txt")
+                        println("   → Prüfe CLAUDE_API_KEY in .env")
                     }
                     errorBody.contains("rate_limit") -> {
                         println("   ⏱️ Rate-Limit erreicht, bitte warten...")
