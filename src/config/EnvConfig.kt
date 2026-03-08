@@ -133,18 +133,6 @@ object EnvConfig {
         return key
     }
 
-    /**
-     * BF6 API Key
-     */
-    fun bf6ApiKey(): String? {
-        val key = get("BF6_API_KEY")
-        if (key == null || key.contains("dein-")) {
-            println("⚠️ [Config] BF6 API Key nicht konfiguriert")
-            return null
-        }
-        return key
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Debug / Status
     // ═══════════════════════════════════════════════════════════════════════════
@@ -173,16 +161,8 @@ object EnvConfig {
         println("\n🔑 API Keys:")
         println("   PUBG:   ${if (has("PUBG_API_KEY")) "✅ Konfiguriert" else "❌ Fehlt"}")
         println("   Claude: ${if (has("CLAUDE_API_KEY")) "✅ Konfiguriert" else "❌ Fehlt"}")
-        println("   BF6:    ${if (has("BF6_API_KEY")) "✅ Konfiguriert" else "❌ Fehlt"}")
+        println("   BF6:    ✅ Kein Key nötig (GameTools API)")
 
         println("\n📝 Konfiguration: .env")
-    }
-
-    /**
-     * Maskiert einen API-Key für die Anzeige.
-     */
-    private fun maskKey(key: String?): String {
-        if (key == null || key.length < 8) return "***"
-        return "${key.take(4)}...${key.takeLast(4)}"
     }
 }
