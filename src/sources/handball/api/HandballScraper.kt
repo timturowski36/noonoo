@@ -99,6 +99,11 @@ WICHTIG:
 
         println("📝 [Handball] Claude Antwort erhalten, parse JSON...")
 
+        // Debug: Zeige Claude-Antwort
+        println("🔍 [Debug] Claude Response:")
+        println(response.text)
+        println("─".repeat(50))
+
         return parseClaudeResponse(response.text, teamId) ?: run {
             println("⚠️ [Handball] JSON-Parsing fehlgeschlagen, verwende Demo-Daten")
             createDemoData(teamId)
@@ -148,14 +153,19 @@ WICHTIG:
         val scoreAway = extractInt(json, "scoreAway")
 
         val date = parseDateTime(dateStr, timeStr) ?: return null
+        val now = LocalDateTime.now()
+        val isInFuture = date.isAfter(now)
 
         // Robuste isPlayed-Ermittlung: Datum in Zukunft = IMMER nicht gespielt
-        val actuallyPlayed = if (date.isAfter(LocalDateTime.now())) {
+        val actuallyPlayed = if (isInFuture) {
             false  // Zukunft = definitiv nicht gespielt
         } else {
             // Vergangenheit: gespielt wenn Score vorhanden
             scoreHome != null && scoreAway != null
         }
+
+        // Debug
+        println("🔍 [Debug] Spiel $index: $dateStr $timeStr → $date | now=$now | future=$isInFuture | played=$actuallyPlayed | score=$scoreHome:$scoreAway")
 
         return HandballMatch(
             id = "match_$index",
