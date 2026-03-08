@@ -85,6 +85,39 @@ class PubgApiClient(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Zeitstempel des letzten Matches abrufen (für Activity-Check)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fun fetchLatestMatchTimestamp(platform: String, accountId: String): Instant? {
+        return try {
+            // 1. Spieler-Endpoint → Match-ID-Liste
+            val playerResponse = httpClient.send(
+                buildRequest("$baseUrl/shards/$platform/players/$accountId"),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            if (playerResponse.statusCode() != 200) return null
+
+            val matchesSection = playerResponse.body().substringAfter("\"matches\"")
+            val firstMatchId = Regex(""""id"\s*:\s*"([^"]+)"""")
+                .find(matchesSection)?.groupValues?.get(1) ?: return null
+
+            // 2. Erstes Match abrufen (mit Rate-Limit)
+            val matchResponse = rateLimitedSend("$baseUrl/shards/$platform/matches/$firstMatchId")
+            if (matchResponse.statusCode() != 200) return null
+
+            // 3. createdAt extrahieren
+            val createdAt = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
+                .find(matchResponse.body())?.groupValues?.get(1) ?: return null
+
+            Instant.parse(createdAt)
+
+        } catch (e: Exception) {
+            println("❌ Fehler (Latest Match): ${e.message}")
+            null
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Lifetime Wins über alle Game Modes summieren
     // ─────────────────────────────────────────────────────────────────────────
 
