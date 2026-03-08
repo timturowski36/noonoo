@@ -13,9 +13,10 @@ import java.time.temporal.ChronoUnit
  * Kombinierter Observer für FeedKrake.
  *
  * Ablauf:
- * 1. Prüft ob jemand PUBG spielt
- * 2. Wenn ja: PUBG Stats alle 45 Minuten senden
- * 3. Zu jeder vollen Stunde: Alle sekundären Module durchgehen
+ * 1. Prüft regelmäßig ob jemand PUBG spielt
+ * 2. Niemand online → gar keine Ausgaben (pausiert)
+ * 3. Jemand online → PUBG Stats alle X Minuten senden
+ * 4. Jemand online + volle Stunde → Sekundäre Module (Handball etc.)
  */
 class CombinedObserver(
     private val pubgPlayers: List<String>,
@@ -99,6 +100,10 @@ class CombinedObserver(
 
     /**
      * Hauptlogik: Prüft Status und führt Module aus.
+     *
+     * Logik:
+     * - Niemand online → gar nichts posten
+     * - Jemand online → PUBG Stats regelmäßig + Handball zur vollen Stunde
      */
     private fun checkAndProcess() {
         val now = LocalDateTime.now()
@@ -109,38 +114,42 @@ class CombinedObserver(
         // 1. Prüfe PUBG Status
         val playingNow = checkWhosPlaying()
 
-        if (playingNow.isNotEmpty()) {
-            println("   🎮 Aktive Spieler: ${playingNow.joinToString(", ")}")
-
-            // Prüfe ob 45 Minuten seit letzten Stats vergangen sind
-            val shouldSendStats = lastPubgStatsTime == null ||
-                ChronoUnit.MINUTES.between(lastPubgStatsTime, now) >= pubgIntervalMinutes
-
-            if (shouldSendStats) {
-                sendPubgStats(playingNow)
-                lastPubgStatsTime = now
-            } else {
-                val minutesUntilNext = pubgIntervalMinutes - ChronoUnit.MINUTES.between(lastPubgStatsTime, now)
-                println("   ⏳ Nächste PUBG Stats in $minutesUntilNext Minuten")
-            }
-        } else {
-            println("   💤 Niemand spielt gerade PUBG")
+        if (playingNow.isEmpty()) {
+            println("   💤 Niemand spielt gerade PUBG - pausiere alle Ausgaben")
             // Reset wenn niemand mehr spielt
             if (currentlyPlaying.isNotEmpty()) {
-                println("   📊 Session beendet - Stats werden beim nächsten Spiel gesendet")
+                println("   📊 Session beendet")
                 currentlyPlaying.clear()
+                lastPubgStatsTime = null  // Reset für nächste Session
             }
+            printNextInfo(now, isActive = false)
+            return  // Nichts weiter tun wenn niemand online
         }
 
-        // 2. Prüfe ob volle Stunde erreicht
+        // Ab hier: Mindestens ein Spieler ist online
+        println("   🎮 Aktive Spieler: ${playingNow.joinToString(", ")}")
+
+        // 2. PUBG Stats senden (alle X Minuten)
+        val shouldSendStats = lastPubgStatsTime == null ||
+            ChronoUnit.MINUTES.between(lastPubgStatsTime, now) >= pubgIntervalMinutes
+
+        if (shouldSendStats) {
+            sendPubgStats(playingNow)
+            lastPubgStatsTime = now
+        } else {
+            val minutesUntilNext = pubgIntervalMinutes - ChronoUnit.MINUTES.between(lastPubgStatsTime, now)
+            println("   ⏳ Nächste PUBG Stats in $minutesUntilNext Minuten")
+        }
+
+        // 3. Sekundäre Module zur vollen Stunde (nur wenn jemand online!)
         val currentHour = now.hour
         if (currentHour != lastHourlyRunHour) {
-            println("\n   🕐 Volle Stunde erreicht - führe Module aus...")
+            println("\n   🕐 Volle Stunde + Spieler online - führe Module aus...")
             runSecondaryModules()
             lastHourlyRunHour = currentHour
         }
 
-        printNextInfo(now)
+        printNextInfo(now, isActive = true)
     }
 
     /**
@@ -261,16 +270,21 @@ class CombinedObserver(
         }
     }
 
-    private fun printNextInfo(now: LocalDateTime) {
+    private fun printNextInfo(now: LocalDateTime, isActive: Boolean) {
         val nextCheck = now.plusMinutes(checkIntervalMinutes.toLong())
-        val nextHour = now.plusHours(1).withMinute(0).withSecond(0)
 
         println("\n   📅 Nächster Check: ${nextCheck.format(timeFormatter)}")
-        println("   📅 Nächste volle Stunde: ${nextHour.format(timeFormatter)}")
 
-        if (currentlyPlaying.isNotEmpty() && lastPubgStatsTime != null) {
-            val nextStats = lastPubgStatsTime!!.plusMinutes(pubgIntervalMinutes.toLong())
-            println("   📅 Nächste PUBG Stats: ${nextStats.format(timeFormatter)}")
+        if (isActive) {
+            val nextHour = now.plusHours(1).withMinute(0).withSecond(0)
+            println("   📅 Nächste volle Stunde: ${nextHour.format(timeFormatter)}")
+
+            if (lastPubgStatsTime != null) {
+                val nextStats = lastPubgStatsTime!!.plusMinutes(pubgIntervalMinutes.toLong())
+                println("   📅 Nächste PUBG Stats: ${nextStats.format(timeFormatter)}")
+            }
+        } else {
+            println("   😴 Warte auf Spieler-Aktivität...")
         }
     }
 }
