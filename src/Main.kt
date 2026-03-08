@@ -4,6 +4,8 @@ import sources.bf6.model.Bf6Stats
 import sources.pubg.model.PlayerStats
 import sources.bundesliga.model.TabellenEintrag
 import sources.heise.model.HeiseArticle
+import sources.claude.model.HandballResult
+import sources.claude.model.HandballResults
 import java.time.Instant
 
 fun main() {
@@ -30,12 +32,9 @@ fun main() {
     )
 
     val pubgMessage = buildString {
+        appendLine("**🎮 PUBG Weekly Stats**")
         appendLine("```")
-        appendLine("╔═══════════════════════════════════════════════════════════════╗")
-        appendLine("║              🎮 PUBG Weekly Stats                             ║")
-        appendLine("╚═══════════════════════════════════════════════════════════════╝")
-        appendLine()
-        appendLine(pubgStats.basicFormat("📊 PhilipNC - Diese Woche:"))
+        appendLine(pubgStats.basicFormat("PhilipNC - Diese Woche:"))
         appendLine()
         appendLine(pubgStats.weeklyExtras())
         appendLine("```")
@@ -63,13 +62,9 @@ fun main() {
     )
 
     val bf6Message = buildString {
-        appendLine("```")
-        appendLine("╔═══════════════════════════════════════════════════════════════╗")
-        appendLine("║              🪖 Battlefield 6 Stats                           ║")
-        appendLine("╚═══════════════════════════════════════════════════════════════╝")
-        appendLine()
+        appendLine("**🪖 Battlefield 6 Stats**")
         appendLine("Spieler: ${bf6Stats.userName}")
-        appendLine()
+        appendLine("```")
         appendLine(bf6Stats.discordFormat())
         appendLine("```")
     }
@@ -86,11 +81,8 @@ fun main() {
     )
 
     val bundesligaMessage = buildString {
+        appendLine("**⚽ Bundesliga Tabelle (Top 5)**")
         appendLine("```")
-        appendLine("╔═══════════════════════════════════════════════════════════════╗")
-        appendLine("║              ⚽ Bundesliga Tabelle (Top 5)                    ║")
-        appendLine("╚═══════════════════════════════════════════════════════════════╝")
-        appendLine()
         appendLine("Pl  Team                   Sp   S  U  N   Tore    Diff   Pkt")
         appendLine("─────────────────────────────────────────────────────────────")
         tabelle.forEach { t ->
@@ -130,15 +122,36 @@ fun main() {
     )
 
     val heiseMessage = buildString {
-        appendLine("```")
-        appendLine("╔═══════════════════════════════════════════════════════════════╗")
-        appendLine("║              📰 Heise News (Letzte 3)                         ║")
-        appendLine("╚═══════════════════════════════════════════════════════════════╝")
-        appendLine()
+        appendLine("**📰 Heise News (Letzte 3)**")
         heiseArticles.forEach { article ->
             appendLine("• ${article.discordFormat()}")
         }
-        appendLine("```")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Handball Demo
+    // ═══════════════════════════════════════════════════════════════════════════
+    val handballResults = HandballResults(
+        team = "HSG Nordhorn-Lingen",
+        league = "2. Handball-Bundesliga",
+        season = "2025/26",
+        results = listOf(
+            HandballResult("02.03.", "HSG Nordhorn-Lingen", "TuS Ferndorf", 31, 28, isHome = true, won = true),
+            HandballResult("24.02.", "VfL Lübeck-Schwartau", "HSG Nordhorn-Lingen", 27, 29, isHome = false, won = true),
+            HandballResult("17.02.", "HSG Nordhorn-Lingen", "TV Emsdetten", 26, 26, isHome = true, won = false),
+            HandballResult("10.02.", "ThSV Eisenach", "HSG Nordhorn-Lingen", 32, 28, isHome = false, won = false),
+            HandballResult("03.02.", "HSG Nordhorn-Lingen", "ASV Hamm-Westfalen", 33, 30, isHome = true, won = true)
+        )
+    )
+
+    val handballMessage = buildString {
+        appendLine("**🤾 Handball Ergebnisse**")
+        appendLine("${handballResults.team} | ${handballResults.league}")
+        appendLine("Bilanz: ${handballResults.wins} Siege, ${handballResults.losses} Niederlagen")
+        appendLine()
+        handballResults.results.forEach { result ->
+            appendLine(result.discordFormat())
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -156,6 +169,8 @@ fun main() {
         append(bundesligaMessage)
         appendLine()
         append(heiseMessage)
+        appendLine()
+        append(handballMessage)
     }
 
     val success = discord.sendMessageToChannel("test", fullMessage)
