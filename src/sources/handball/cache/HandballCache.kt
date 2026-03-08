@@ -83,7 +83,8 @@ class HandballCache(
                     line.startsWith("FETCHED_AT=") -> {
                         fetchedAt = LocalDateTime.parse(line.substringAfter("="), dateTimeFormatter)
                     }
-                    line.startsWith("match_") || line.startsWith("game_") -> {
+                    // Match-Zeilen haben das Format: ID|DATE|HOME|AWAY|...
+                    line.contains("|") && !line.startsWith("#") -> {
                         deserializeMatch(line)?.let { matches.add(it) }
                     }
                 }
