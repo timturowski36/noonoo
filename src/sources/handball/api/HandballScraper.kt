@@ -149,12 +149,12 @@ WICHTIG:
 
         val date = parseDateTime(dateStr, timeStr) ?: return null
 
-        // Robuste isPlayed-Ermittlung: ohne Ergebnis + Datum in Zukunft = nicht gespielt
-        val claudeIsPlayed = extractBoolean(json, "isPlayed")
-        val actuallyPlayed = when {
-            scoreHome != null && scoreAway != null -> true  // Hat Ergebnis = gespielt
-            date.isAfter(LocalDateTime.now()) -> false      // Zukunft ohne Ergebnis = nicht gespielt
-            else -> claudeIsPlayed ?: false                 // Sonst Claude vertrauen oder false
+        // Robuste isPlayed-Ermittlung: Datum in Zukunft = IMMER nicht gespielt
+        val actuallyPlayed = if (date.isAfter(LocalDateTime.now())) {
+            false  // Zukunft = definitiv nicht gespielt
+        } else {
+            // Vergangenheit: gespielt wenn Score vorhanden
+            scoreHome != null && scoreAway != null
         }
 
         return HandballMatch(

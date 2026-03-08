@@ -225,12 +225,12 @@ class HandballCache(
             val scoreHome = parts[5].toIntOrNull()
             val scoreAway = parts[6].toIntOrNull()
 
-            // Robuste isPlayed-Ermittlung: ohne Ergebnis + Datum in Zukunft = nicht gespielt
-            val cachedIsPlayed = parts[7].toBoolean()
-            val actuallyPlayed = when {
-                scoreHome != null && scoreAway != null -> true  // Hat Ergebnis = gespielt
-                date.isAfter(LocalDateTime.now()) -> false      // Zukunft ohne Ergebnis = nicht gespielt
-                else -> cachedIsPlayed                          // Sonst Cache vertrauen
+            // Robuste isPlayed-Ermittlung: Datum in Zukunft = IMMER nicht gespielt
+            val actuallyPlayed = if (date.isAfter(LocalDateTime.now())) {
+                false  // Zukunft = definitiv nicht gespielt
+            } else {
+                // Vergangenheit: gespielt wenn Score vorhanden
+                scoreHome != null && scoreAway != null
             }
 
             HandballMatch(
