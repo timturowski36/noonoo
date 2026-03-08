@@ -41,6 +41,19 @@ class WebFetcher {
 
             println("✅ [WebFetcher] ${text.length} Zeichen geladen (${title ?: "kein Titel"})")
 
+            // Debug: Suche nach __NEXT_DATA__ oder eingebetteten JSON-Daten
+            if (html.contains("__NEXT_DATA__")) {
+                println("📦 [WebFetcher] Next.js Seite erkannt - Daten in __NEXT_DATA__")
+            }
+
+            // Debug: Zeige ob kommende Spiele im HTML sind
+            val upcomingPatterns = listOf("15.03", "21.03", "18.04", "25.04", "03.05", "Hattingen-Sprockhövel")
+            val foundPatterns = upcomingPatterns.filter { html.contains(it) || text.contains(it) }
+            println("🔍 [WebFetcher] Kommende Spiele im HTML gefunden: $foundPatterns")
+            if (foundPatterns.isEmpty()) {
+                println("⚠️ [WebFetcher] WARNUNG: Keine kommenden Spiele im HTML! Seite lädt Daten per JavaScript.")
+            }
+
             WebContent(
                 url = url,
                 title = title,
