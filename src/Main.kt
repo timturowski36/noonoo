@@ -1,31 +1,43 @@
 import config.EnvConfig
+import sources.handball.observer.HandballModule
 import sources.pubg.observer.PubgObserver
+import kotlin.concurrent.thread
 
 fun main() {
-    // ═══════════════════════════════════════════════════════════════════════════
-    // KONFIGURATION - Spielernamen hier eintragen!
-    // ═══════════════════════════════════════════════════════════════════════════
-    val players = listOf(
-        "brotrustgaming",
-        "philipnc"
-    )
-
-    // Platform: "steam", "xbox", "psn", "kakao", "stadia"
-    val platform = "steam"
-
-    // Alle X Minuten nach Aktivität prüfen
-    val checkIntervalMinutes = 30
-
-    // Discord Channel (Name aus .env, z.B. DISCORD_WEBHOOK_GAMING)
-    val discordChannel = "gaming"
-    // ═══════════════════════════════════════════════════════════════════════════
-
     println("""
 
     ╔═══════════════════════════════════════════════════════════════╗
-    ║              🐙 FeedKrake - PUBG Observer                     ║
+    ║              🐙 FeedKrake - Multi-Module                      ║
     ╚═══════════════════════════════════════════════════════════════╝
     """.trimIndent())
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MODUL-KONFIGURATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Welche Module sollen laufen?
+    val enablePubgObserver = true
+    val enableHandballModule = true
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PUBG KONFIGURATION
+    // ═══════════════════════════════════════════════════════════════════════════
+    val pubgPlayers = listOf("brotrustgaming", "philipnc")
+    val pubgPlatform = "steam"
+    val pubgCheckIntervalMinutes = 30
+    val pubgDiscordChannel = "gaming"
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HANDBALL KONFIGURATION
+    // ═══════════════════════════════════════════════════════════════════════════
+    val handballTeamId = "handball4all.westfalen.1309001"
+    val handballSeasonFrom = "2025-07-01"
+    val handballSeasonTo = "2026-06-30"
+    val handballDiscordChannel = "handball"
+    val handballCheckIntervalMinutes = 60
+    val handballObserverMode = false  // true = kontinuierlich, false = einmalig
+
+    // ═══════════════════════════════════════════════════════════════════════════
 
     // Config laden
     if (!EnvConfig.load()) {
@@ -33,27 +45,76 @@ fun main() {
         return
     }
 
-    // Discord Webhook holen
-    val webhookUrl = EnvConfig.discordWebhook(discordChannel)
-    if (webhookUrl == null) {
-        println("❌ Discord Webhook '$discordChannel' nicht konfiguriert!")
-        println("   Füge in .env hinzu: DISCORD_WEBHOOK_${discordChannel.uppercase()}=https://...")
-        return
+    val runningThreads = mutableListOf<Thread>()
+    var pubgObserver: PubgObserver? = null
+    var handballModule: HandballModule? = null
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // PUBG Observer starten
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (enablePubgObserver) {
+        val webhookUrl = EnvConfig.discordWebhook(pubgDiscordChannel)
+        if (webhookUrl == null) {
+            println("⚠️ PUBG: Discord Webhook '$pubgDiscordChannel' nicht konfiguriert")
+        } else {
+            pubgObserver = PubgObserver(
+                players = pubgPlayers,
+                platform = pubgPlatform,
+                discordWebhookUrl = webhookUrl,
+                checkIntervalMinutes = pubgCheckIntervalMinutes
+            )
+
+            val pubgThread = thread(name = "PUBG-Observer") {
+                pubgObserver!!.start()
+            }
+            runningThreads.add(pubgThread)
+            println("✅ PUBG Observer gestartet (Thread: ${pubgThread.name})")
+        }
     }
 
-    // Observer starten
-    val observer = PubgObserver(
-        players = players,
-        platform = platform,
-        discordWebhookUrl = webhookUrl,
-        checkIntervalMinutes = checkIntervalMinutes
-    )
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Handball Module starten
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (enableHandballModule) {
+        val webhookUrl = EnvConfig.discordWebhook(handballDiscordChannel)
 
-    // Shutdown Hook für sauberes Beenden
+        handballModule = HandballModule(
+            teamId = handballTeamId,
+            discordWebhookUrl = webhookUrl,
+            seasonFrom = handballSeasonFrom,
+            seasonTo = handballSeasonTo
+        )
+
+        if (handballObserverMode) {
+            // Kontinuierlicher Modus - als Thread
+            val handballThread = thread(name = "Handball-Observer") {
+                handballModule!!.startObserver(handballCheckIntervalMinutes)
+            }
+            runningThreads.add(handballThread)
+            println("✅ Handball Observer gestartet (Thread: ${handballThread.name})")
+        } else {
+            // Einmaliger Durchlauf - blockierend ausführen
+            println("\n🤾 Handball Module - Einzeldurchlauf...")
+            handballModule.run()
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Shutdown Hook
+    // ─────────────────────────────────────────────────────────────────────────────
     Runtime.getRuntime().addShutdownHook(Thread {
         println("\n🛑 Shutdown Signal empfangen...")
-        observer.stop()
+        pubgObserver?.stop()
+        handballModule?.stop()
     })
 
-    observer.start()
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Auf Threads warten (wenn vorhanden)
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (runningThreads.isNotEmpty()) {
+        println("\n🕐 ${runningThreads.size} Module laufen... (Ctrl+C zum Beenden)")
+        runningThreads.forEach { it.join() }
+    } else {
+        println("\n✅ Alle Module abgeschlossen.")
+    }
 }
