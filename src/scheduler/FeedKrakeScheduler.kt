@@ -1,6 +1,5 @@
 package scheduler
 
-import outputs.discord.DiscordBot
 import scheduler.config.FeedKrakeConfig
 import scheduler.config.JobConfig
 import scheduler.discord.DiscordWebhook
