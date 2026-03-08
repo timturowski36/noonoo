@@ -1,310 +1,243 @@
 package sources.handball.api
 
+import config.EnvConfig
+import sources.claude.api.ClaudeApiClient
+import sources.claude.prompts.PromptContext
 import sources.handball.model.HandballMatch
 import sources.handball.model.HandballScheduleData
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
- * Client für handball.net / handball4all Spielpläne.
- *
- * Versucht mehrere Strategien:
- * 1. Direkte handball4all API (JSON)
- * 2. HTML-Scraping von handball.net
+ * Handball-Client der Claude verwendet um Spielpläne von handball.net zu extrahieren.
  */
 class HandballScraper {
-    private val httpClient = HttpClient.newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .connectTimeout(Duration.ofSeconds(10))
-        .build()
+
+    private val claudeClient: ClaudeApiClient? = run {
+        val apiKey = EnvConfig.claudeApiKey()
+        if (apiKey != null) ClaudeApiClient(apiKey) else null
+    }
 
     companion object {
-        // handball4all verwendet diese Struktur für Team-IDs:
-        // handball4all.westfalen.1309001 -> Verband: westfalen, Team-Nr: 1309001
-        private val TEAM_ID_PATTERN = Regex("""handball4all\.(\w+)\.(\d+)""")
+        private val HANDBALL_SCHEDULE_CONTEXT = PromptContext(
+            name = "handball_full_schedule",
+            description = "Vollständiger Handball-Spielplan (vergangene + kommende Spiele)",
+            systemPrompt = """Du bist ein Handball-Daten-Assistent. Extrahiere ALLE Spiele aus dem Spielplan.
+
+Antworte NUR mit validem JSON, keine Erklärungen:
+{
+  "team": "Mannschaftsname (z.B. HSG RE/OE)",
+  "league": "Liga/Klasse",
+  "season": "2025/26",
+  "matches": [
+    {
+      "date": "2025-09-13",
+      "time": "18:30",
+      "homeTeam": "Heimteam",
+      "awayTeam": "Gastteam",
+      "venue": "Hallenname",
+      "scoreHome": 25,
+      "scoreAway": 23,
+      "isPlayed": true
+    },
+    {
+      "date": "2026-03-15",
+      "time": "18:00",
+      "homeTeam": "Heimteam",
+      "awayTeam": "Gastteam",
+      "venue": "Hallenname",
+      "scoreHome": null,
+      "scoreAway": null,
+      "isPlayed": false
+    }
+  ]
+}
+
+WICHTIG:
+- Extrahiere ALLE Spiele, sowohl vergangene (mit Ergebnis) als auch kommende (ohne Ergebnis)
+- Datum im Format YYYY-MM-DD
+- Zeit im Format HH:MM
+- Bei gespielten Spielen: scoreHome und scoreAway als Zahlen, isPlayed: true
+- Bei kommenden Spielen: scoreHome und scoreAway als null, isPlayed: false
+- Sortiere nach Datum aufsteigend""",
+            userPrefix = "",
+            userSuffix = ""
+        )
+
+        private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     }
 
     /**
-     * Lädt den Spielplan für ein Team.
-     *
-     * @param teamId Die Team-ID (z.B. "handball4all.westfalen.1309001")
-     * @param seasonFrom Start der Saison (z.B. "2025-07-01")
-     * @param seasonTo Ende der Saison (z.B. "2026-06-30")
+     * Lädt den Spielplan für ein Team via Claude.
      */
     fun fetchSchedule(
         teamId: String,
         seasonFrom: String = "2025-07-01",
         seasonTo: String = "2026-06-30"
     ): HandballScheduleData? {
-        println("🤾 [Handball] Lade Spielplan für $teamId...")
-
-        // Versuche zuerst die API
-        val apiResult = tryFetchFromApi(teamId)
-        if (apiResult != null) {
-            return apiResult
+        if (claudeClient == null) {
+            println("❌ [Handball] Claude API Key nicht konfiguriert!")
+            println("   Füge CLAUDE_API_KEY in .env hinzu")
+            return createDemoData(teamId)
         }
 
-        // Fallback: HTML scraping
-        println("   ⚠️ API nicht erreichbar, versuche HTML-Scraping...")
-        return tryFetchFromHtml(teamId, seasonFrom, seasonTo)
-    }
+        val url = "https://www.handball.net/mannschaften/$teamId/spielplan?dateFrom=$seasonFrom&dateTo=$seasonTo"
 
-    /**
-     * Versucht Daten von der handball4all API zu laden.
-     */
-    private fun tryFetchFromApi(teamId: String): HandballScheduleData? {
-        val match = TEAM_ID_PATTERN.find(teamId) ?: return null
-        val verband = match.groupValues[1]
-        val teamNr = match.groupValues[2]
+        println("🤾 [Handball] Lade Spielplan via Claude...")
+        println("   URL: $url")
 
-        // handball4all API Endpunkte (öffentlich zugänglich)
-        val apiUrls = listOf(
-            "https://api.h4a.mobi/h4a/v0/$verband/teams/$teamNr/games",
-            "https://spo.handball4all.de/service/if_g_json.php?cmd=pcu&sp0=$teamNr"
+        val response = claudeClient.extractFromWebpage(
+            url = url,
+            context = HANDBALL_SCHEDULE_CONTEXT,
+            additionalPrompt = "Extrahiere alle Spiele aus dem Spielplan. Das gesuchte Team ist wahrscheinlich HSG RE/OE oder ähnlich."
         )
 
-        for (url in apiUrls) {
-            try {
-                println("   🌐 Versuche: $url")
-                val response = fetchWithTimeout(url, 8)
-
-                if (response != null && response.contains("\"")) {
-                    val matches = parseApiResponse(response, teamId)
-                    if (matches.isNotEmpty()) {
-                        println("   ✅ ${matches.size} Spiele von API geladen")
-                        return HandballScheduleData(
-                            teamId = teamId,
-                            teamName = extractTeamNameFromApi(response) ?: "HSG RE/OE",
-                            season = "2025/26",
-                            matches = matches,
-                            fetchedAt = LocalDateTime.now()
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                println("   ⚠️ API-Fehler: ${e.message}")
-            }
+        if (response == null) {
+            println("❌ [Handball] Claude konnte die Seite nicht analysieren")
+            return createDemoData(teamId)
         }
 
-        return null
-    }
+        println("📝 [Handball] Claude Antwort erhalten, parse JSON...")
 
-    /**
-     * Fallback: HTML-Scraping von handball.net
-     */
-    private fun tryFetchFromHtml(
-        teamId: String,
-        seasonFrom: String,
-        seasonTo: String
-    ): HandballScheduleData? {
-        val url = "https://www.handball.net/mannschaften/$teamId/spielplan?dateFrom=$seasonFrom&dateTo=$seasonTo"
-        println("   🌐 Lade HTML: $url")
-
-        return try {
-            val html = fetchWithTimeout(url, 15) ?: return null
-            val matches = parseHtmlMatches(html)
-            val teamName = extractTeamNameFromHtml(html) ?: "HSG RE/OE"
-
-            if (matches.isEmpty()) {
-                println("   ⚠️ Keine Spiele im HTML gefunden")
-                // Erstelle Demo-Daten für Tests
-                return createDemoData(teamId)
-            }
-
-            println("   ✅ ${matches.size} Spiele aus HTML extrahiert")
-
-            HandballScheduleData(
-                teamId = teamId,
-                teamName = teamName,
-                season = "2025/26",
-                matches = matches,
-                fetchedAt = LocalDateTime.now()
-            )
-        } catch (e: Exception) {
-            println("   ❌ HTML-Fehler: ${e.message}")
-            // Bei Fehler: Demo-Daten für Tests
+        return parseClaudeResponse(response.text, teamId) ?: run {
+            println("⚠️ [Handball] JSON-Parsing fehlgeschlagen, verwende Demo-Daten")
             createDemoData(teamId)
         }
     }
 
-    private fun fetchWithTimeout(url: String, timeoutSeconds: Int): String? {
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .header("Accept", "text/html,application/json,*/*")
-            .timeout(Duration.ofSeconds(timeoutSeconds.toLong()))
-            .GET()
-            .build()
+    private fun parseClaudeResponse(json: String, teamId: String): HandballScheduleData? {
+        try {
+            // Extrahiere Team-Info
+            val team = extractString(json, "team") ?: "HSG RE/OE"
+            val league = extractString(json, "league") ?: "Kreisliga"
+            val season = extractString(json, "season") ?: "2025/26"
 
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+            // Extrahiere Matches-Array
+            val matchesArray = extractArray(json, "matches") ?: return null
+            val matches = matchesArray.mapIndexedNotNull { index, matchJson ->
+                parseMatch(matchJson, index)
+            }
 
-        return if (response.statusCode() in 200..299) {
-            response.body()
-        } else {
-            println("   ❌ HTTP ${response.statusCode()}")
-            null
+            if (matches.isEmpty()) {
+                println("⚠️ [Handball] Keine Spiele im JSON gefunden")
+                return null
+            }
+
+            println("✅ [Handball] ${matches.size} Spiele extrahiert")
+
+            return HandballScheduleData(
+                teamId = teamId,
+                teamName = team,
+                season = season,
+                matches = matches,
+                fetchedAt = LocalDateTime.now()
+            )
+        } catch (e: Exception) {
+            println("❌ [Handball] Parse-Fehler: ${e.message}")
+            return null
         }
     }
 
-    private fun parseApiResponse(json: String, teamId: String): List<HandballMatch> {
-        val matches = mutableListOf<HandballMatch>()
-
-        // Suche nach Spiel-Objekten im JSON
-        // Typische Felder: gDate, gTime, gHomeTeam, gGuestTeam, gHomeGoals, gGuestGoals
-        val gamePattern = Regex("""\{[^{}]*"g(?:Date|Home|Guest|Goals)[^{}]*}""", RegexOption.DOT_MATCHES_ALL)
-
-        gamePattern.findAll(json).forEachIndexed { index, match ->
-            parseGameFromJson(match.value, index)?.let { matches.add(it) }
-        }
-
-        return matches
-    }
-
-    private fun parseGameFromJson(json: String, index: Int): HandballMatch? {
-        fun extract(key: String): String? {
-            val pattern = Regex(""""$key"\s*:\s*"([^"\\]*)"""")
-            return pattern.find(json)?.groupValues?.get(1)
-        }
-
-        fun extractInt(key: String): Int? {
-            val pattern = Regex(""""$key"\s*:\s*(\d+)""")
-            return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
-        }
-
-        val dateStr = extract("gDate") ?: extract("date") ?: return null
-        val timeStr = extract("gTime") ?: extract("time") ?: "15:00"
-        val homeTeam = extract("gHomeTeam") ?: extract("homeTeam") ?: return null
-        val awayTeam = extract("gGuestTeam") ?: extract("guestTeam") ?: extract("awayTeam") ?: return null
-        val venue = extract("gGymnasiumName") ?: extract("venue")
-        val scoreHome = extractInt("gHomeGoals") ?: extractInt("homeGoals")
-        val scoreAway = extractInt("gGuestGoals") ?: extractInt("guestGoals")
+    private fun parseMatch(json: String, index: Int): HandballMatch? {
+        val dateStr = extractString(json, "date") ?: return null
+        val timeStr = extractString(json, "time") ?: "15:00"
+        val homeTeam = extractString(json, "homeTeam") ?: return null
+        val awayTeam = extractString(json, "awayTeam") ?: return null
+        val venue = extractString(json, "venue")
+        val scoreHome = extractInt(json, "scoreHome")
+        val scoreAway = extractInt(json, "scoreAway")
+        val isPlayed = extractBoolean(json, "isPlayed") ?: (scoreHome != null && scoreAway != null)
 
         val date = parseDateTime(dateStr, timeStr) ?: return null
 
         return HandballMatch(
-            id = "game_$index",
+            id = "match_$index",
             date = date,
             homeTeam = homeTeam,
             awayTeam = awayTeam,
             venue = venue,
             scoreHome = scoreHome,
             scoreAway = scoreAway,
-            isPlayed = scoreHome != null && scoreAway != null
+            isPlayed = isPlayed
         )
-    }
-
-    private fun parseHtmlMatches(html: String): List<HandballMatch> {
-        val matches = mutableListOf<HandballMatch>()
-
-        // Suche nach Spiel-Einträgen mit Datum-Pattern
-        val datePattern = Regex("""(\d{1,2})\.(\d{2})\.""")
-        val timePattern = Regex("""(\d{1,2}):(\d{2})""")
-        val teamPattern = Regex("""(HSG|FC|TV|TuS|VfL|SG|SC|TSV|SpVg|HC|HG|TG|MTV|SVG|JSG)[^\n<]{2,30}""", RegexOption.IGNORE_CASE)
-
-        // Vereinfachtes Parsing: Suche Zeilen mit Datum und Teams
-        val lines = html.split(Regex("""</?(?:div|tr|li)[^>]*>"""))
-
-        var index = 0
-        for (line in lines) {
-            val dateMatch = datePattern.find(line) ?: continue
-            val teams = teamPattern.findAll(line).map { it.value.trim() }.toList()
-            if (teams.size < 2) continue
-
-            val day = dateMatch.groupValues[1].toIntOrNull() ?: continue
-            val month = dateMatch.groupValues[2].toIntOrNull() ?: continue
-            val year = if (month >= 7) 2025 else 2026
-
-            val timeMatch = timePattern.find(line)
-            val hour = timeMatch?.groupValues?.get(1)?.toIntOrNull() ?: 15
-            val minute = timeMatch?.groupValues?.get(2)?.toIntOrNull() ?: 0
-
-            val date = try {
-                LocalDateTime.of(year, month, day, hour, minute)
-            } catch (e: Exception) {
-                continue
-            }
-
-            val scorePattern = Regex("""(\d+)\s*:\s*(\d+)""")
-            val scoreMatch = scorePattern.find(line)
-            val scoreHome = scoreMatch?.groupValues?.get(1)?.toIntOrNull()
-            val scoreAway = scoreMatch?.groupValues?.get(2)?.toIntOrNull()
-
-            matches.add(
-                HandballMatch(
-                    id = "match_$index",
-                    date = date,
-                    homeTeam = teams[0],
-                    awayTeam = teams[1],
-                    venue = null,
-                    scoreHome = scoreHome,
-                    scoreAway = scoreAway,
-                    isPlayed = scoreHome != null && scoreAway != null && (scoreHome > 0 || scoreAway > 0)
-                )
-            )
-            index++
-        }
-
-        return matches
-    }
-
-    private fun extractTeamNameFromApi(json: String): String? {
-        val pattern = Regex(""""(?:teamName|gHomeTeam|gGuestTeam)"\s*:\s*"([^"]*HSG[^"]*)"""", RegexOption.IGNORE_CASE)
-        return pattern.find(json)?.groupValues?.get(1)
-    }
-
-    private fun extractTeamNameFromHtml(html: String): String? {
-        val titlePattern = Regex("""<title>([^<]+)</title>""", RegexOption.IGNORE_CASE)
-        val titleMatch = titlePattern.find(html)
-        if (titleMatch != null) {
-            val title = titleMatch.groupValues[1]
-            val teamPattern = Regex("""(HSG[^|<-]+|FC[^|<-]+|TV[^|<-]+)""", RegexOption.IGNORE_CASE)
-            teamPattern.find(title)?.let { return it.value.trim() }
-        }
-        return null
     }
 
     private fun parseDateTime(dateStr: String, timeStr: String): LocalDateTime? {
         return try {
-            // Format: "13.09.2025" oder "2025-09-13"
-            val dateParts = if (dateStr.contains(".")) {
-                dateStr.split(".").map { it.toInt() }
-            } else {
-                dateStr.split("-").map { it.toInt() }.reversed()
-            }
-
             val timeParts = timeStr.split(":").map { it.toInt() }
-
-            if (dateParts.size >= 3 && timeParts.size >= 2) {
-                val day = dateParts[0]
-                val month = dateParts[1]
-                val year = if (dateParts[2] < 100) 2000 + dateParts[2] else dateParts[2]
-                LocalDateTime.of(year, month, day, timeParts[0], timeParts[1])
-            } else null
+            val date = java.time.LocalDate.parse(dateStr, DATE_FORMATTER)
+            LocalDateTime.of(date, java.time.LocalTime.of(timeParts[0], timeParts.getOrElse(1) { 0 }))
         } catch (e: Exception) {
             null
         }
     }
 
-    /**
-     * Erstellt Demo-Daten wenn keine echten Daten verfügbar sind.
-     * Nützlich für Tests und Entwicklung.
-     */
+    // ─────────────────────────────────────────────────────────────────────────────
+    // JSON-Parsing Hilfsfunktionen (ohne Library)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private fun extractString(json: String, key: String): String? {
+        val pattern = Regex(""""$key"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""")
+        return pattern.find(json)?.groupValues?.get(1)
+            ?.replace("\\n", "\n")
+            ?.replace("\\\"", "\"")
+    }
+
+    private fun extractInt(json: String, key: String): Int? {
+        val pattern = Regex(""""$key"\s*:\s*(\d+)""")
+        return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun extractBoolean(json: String, key: String): Boolean? {
+        val pattern = Regex(""""$key"\s*:\s*(true|false)""")
+        return pattern.find(json)?.groupValues?.get(1)?.toBoolean()
+    }
+
+    private fun extractArray(json: String, key: String): List<String>? {
+        // Finde den Array-Start
+        val keyPattern = """"$key"\s*:\s*\["""
+        val startMatch = Regex(keyPattern).find(json) ?: return null
+        val arrayStart = startMatch.range.last + 1
+
+        // Finde alle Objekte im Array
+        val objects = mutableListOf<String>()
+        var depth = 0
+        var objectStart = -1
+
+        for (i in arrayStart until json.length) {
+            when (json[i]) {
+                '{' -> {
+                    if (depth == 0) objectStart = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && objectStart >= 0) {
+                        objects.add(json.substring(objectStart, i + 1))
+                        objectStart = -1
+                    }
+                }
+                ']' -> if (depth == 0) break
+            }
+        }
+
+        return objects.ifEmpty { null }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Demo-Daten für Tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
     private fun createDemoData(teamId: String): HandballScheduleData {
-        println("   📋 Erstelle Demo-Spielplan für Tests...")
+        println("📋 [Handball] Erstelle Demo-Spielplan für Tests...")
 
         val now = LocalDateTime.now()
         val matches = listOf(
-            HandballMatch("demo_1", now.minusDays(14), "HSG RE/OE", "FC Schalke 04", "Willi-Winter-Halle", 27, 25, true),
-            HandballMatch("demo_2", now.minusDays(7), "HSV Herbede", "HSG RE/OE", "Sporthalle Herbede", 20, 27, true),
-            HandballMatch("demo_3", now.plusDays(7), "HSG RE/OE", "TuS Bommern", "Willi-Winter-Halle", null, null, false),
-            HandballMatch("demo_4", now.plusDays(14), "SG Langendreer", "HSG RE/OE", "Sporthalle Langendreer", null, null, false),
-            HandballMatch("demo_5", now.plusDays(21), "HSG RE/OE", "TV Wattenscheid", "Willi-Winter-Halle", null, null, false)
+            HandballMatch("demo_1", now.minusDays(14).withHour(18).withMinute(30), "HSG RE/OE", "FC Schalke 04", "Willi-Winter-Halle", 27, 25, true),
+            HandballMatch("demo_2", now.minusDays(7).withHour(17).withMinute(0), "HSV Herbede", "HSG RE/OE", "Sporthalle Herbede", 20, 27, true),
+            HandballMatch("demo_3", now.plusDays(7).withHour(18).withMinute(30), "HSG RE/OE", "TuS Bommern", "Willi-Winter-Halle", null, null, false),
+            HandballMatch("demo_4", now.plusDays(14).withHour(17).withMinute(0), "SG Langendreer", "HSG RE/OE", "Sporthalle Langendreer", null, null, false),
+            HandballMatch("demo_5", now.plusDays(21).withHour(18).withMinute(30), "HSG RE/OE", "TV Wattenscheid", "Willi-Winter-Halle", null, null, false)
         )
 
         return HandballScheduleData(
