@@ -259,7 +259,7 @@ class CombinedObserver(
 
     /**
      * Prüft ob ein Spieler gerade spielt.
-     * Spieler gilt als aktiv wenn letztes Match < 45 Min her ist.
+     * Spieler gilt als aktiv wenn letztes Match < 90 Min (1.5h) her ist.
      */
     private fun checkIfPlaying(playerName: String): Boolean {
         val client = pubgClient ?: return false
@@ -269,7 +269,10 @@ class CombinedObserver(
 
         val matchTime = LocalDateTime.ofInstant(lastMatchTime, ZoneId.systemDefault())
         val minutesSinceMatch = ChronoUnit.MINUTES.between(matchTime, LocalDateTime.now())
-        return minutesSinceMatch < 45
+
+        println("      $playerName: Letztes Match vor $minutesSinceMatch Min")
+
+        return minutesSinceMatch < 90
     }
 
     /**
