@@ -1,13 +1,26 @@
-import config.EnvConfig
-import sources.pubg.observer.PubgObserver
+package sources.pubg.observer
 
+import config.EnvConfig
+
+/**
+ * PUBG Observer Runner - Hauptprogramm zum Starten des Observers.
+ *
+ * Konfiguration:
+ * 1. PUBG API Key in .env: PUBG_API_KEY=...
+ * 2. Discord Webhook in .env: DISCORD_WEBHOOK_GAMING=...
+ * 3. Spielernamen unten im Array anpassen
+ *
+ * Starten: `kotlin PubgObserverRunner.kt` oder via IntelliJ
+ */
 fun main() {
     // ═══════════════════════════════════════════════════════════════════════════
     // KONFIGURATION - Spielernamen hier eintragen!
     // ═══════════════════════════════════════════════════════════════════════════
     val players = listOf(
         "brotrustgaming",
-        "philipnc"
+        "philipnc",
+        "chrissi1970"
+        // Weitere Spieler hier hinzufügen...
     )
 
     // Platform: "steam", "xbox", "psn", "kakao", "stadia"
