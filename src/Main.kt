@@ -1,4 +1,5 @@
 import config.EnvConfig
+import scheduler.BundesligaTableModule
 import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
@@ -123,9 +124,9 @@ fun runCombinedMode(
     observer.addModule(HandballUpcomingModule(handballTeamId, handballTeamName), minuteOffset = 30)
     observer.addModule(HandballTableModule(handballTeamId, handballTeamName), minuteOffset = 0, oddHoursOnly = true)
 
-    // TODO: Weitere Module hinzufügen:
-    // observer.addModule(BundesligaTableModule(...))
-    // observer.addModule(HeiseNewsModule(...))
+    // Fussball Bundesliga Tabellen (zur Minute 15, gerade Stunden)
+    observer.addModule(BundesligaTableModule.ersteLiga(), minuteOffset = 15, evenHoursOnly = true)
+    observer.addModule(BundesligaTableModule.zweiteLiga(), minuteOffset = 15, oddHoursOnly = true)
 
     Runtime.getRuntime().addShutdownHook(Thread {
         println("\n🛑 Shutdown Signal empfangen...")

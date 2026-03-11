@@ -1,12 +1,15 @@
 package scheduler
 
 import scheduler.discord.DiscordWebhook
+import sources.bundesliga.api.TabellenApiClient
+import sources.bundesliga.model.TabellenEintrag
 import sources.handball.api.HandballScraper
 import sources.handball.api.HandballTableScraper
 import sources.handball.cache.HandballCache
 import sources.handball.cache.HandballTableCache
 import sources.handball.model.HandballScheduleData
 import sources.handball.model.HandballTableData
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.concurrent.thread
@@ -257,5 +260,76 @@ class HandballTableModule(
         } else {
             scraper.fetchTable(teamId)?.also { cache.save(it) }
         }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Bundesliga Module
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Modul: Bundesliga Tabelle (1. oder 2. Liga)
+ */
+class BundesligaTableModule(
+    private val liga: String = "bl1",  // bl1 = 1. Bundesliga, bl2 = 2. Bundesliga
+    private val maxTeams: Int = 18
+) : ScheduledModule {
+    override val name = when (liga) {
+        "bl1" -> "Fussball: 1. Bundesliga Tabelle"
+        "bl2" -> "Fussball: 2. Bundesliga Tabelle"
+        else -> "Fussball: $liga Tabelle"
+    }
+
+    private val apiClient = TabellenApiClient()
+
+    override fun execute(): String? {
+        val saison = ermittleAktuelleSaison()
+        val tabelle = apiClient.fetchTabelle(liga, saison)
+        if (tabelle.isEmpty()) return null
+        return formatTabelle(tabelle.take(maxTeams))
+    }
+
+    private fun ermittleAktuelleSaison(): String {
+        val currentYear = LocalDate.now().year
+        val currentMonth = LocalDate.now().monthValue
+        return if (currentMonth >= 8) currentYear.toString() else (currentYear - 1).toString()
+    }
+
+    private fun formatTabelle(tabelle: List<TabellenEintrag>): String {
+        val ligaName = when (liga) {
+            "bl1" -> "1. Bundesliga"
+            "bl2" -> "2. Bundesliga"
+            else -> liga
+        }
+
+        return buildString {
+            appendLine("**$ligaName - Tabelle**")
+            appendLine("```")
+            appendLine(" #  | Team                | Sp | S  | U | N  | Tore  | Diff | Pkt")
+            appendLine("----|---------------------|----|----|---|----|-------|------|----")
+
+            tabelle.forEach { e ->
+                val platz = e.platz.toString().padStart(2)
+                val team = e.shortName.take(19).padEnd(19)
+                val spiele = e.matches.toString().padStart(2)
+                val siege = e.won.toString().padStart(2)
+                val unent = e.draw.toString().padStart(1)
+                val nied = e.lost.toString().padStart(2)
+                val tore = "${e.goals}:${e.opponentGoals}".padStart(5)
+                val diff = (if (e.goalDiff >= 0) "+${e.goalDiff}" else "${e.goalDiff}").padStart(4)
+                val punkte = e.points.toString().padStart(3)
+
+                appendLine(" $platz | $team | $spiele | $siege | $unent | $nied | $tore | $diff | $punkte")
+            }
+            append("```")
+        }
+    }
+
+    companion object {
+        /** 1. Bundesliga Tabelle */
+        fun ersteLiga(maxTeams: Int = 18) = BundesligaTableModule("bl1", maxTeams)
+
+        /** 2. Bundesliga Tabelle */
+        fun zweiteLiga(maxTeams: Int = 18) = BundesligaTableModule("bl2", maxTeams)
     }
 }
