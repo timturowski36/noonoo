@@ -98,7 +98,7 @@ fun main() {
 }
 
 /**
- * Combined-Modus: PUBG prüfen, Stats alle 45 Min wenn aktiv, Module zur vollen Stunde
+ * Combined-Modus: PUBG Stats alle 30 Min, Module dazwischen bei :15 und :45
  */
 fun runCombinedMode(
     pubgPlayers: List<String>,
@@ -113,24 +113,26 @@ fun runCombinedMode(
         pubgPlayers = pubgPlayers,
         pubgPlatform = pubgPlatform,
         discordWebhookUrl = webhookUrl,
-        pubgIntervalMinutes = 45,   // PUBG Stats alle 45 Min wenn jemand spielt
+        pubgIntervalMinutes = 30,   // PUBG Stats alle 30 Min (:00 und :30)
         checkIntervalMinutes = 5     // Status-Check alle 5 Min
     )
 
-    // Handball-Module zeitversetzt:
-    // - Gerade Stunde (14:00, 16:00, ...): Ergebnisse
-    // - Halbe Stunde (:30): Nächste Spiele
-    // - Ungerade Stunde (15:00, 17:00, ...): Tabelle (komplett)
-    observer.addModule(HandballResultsModule(handballTeamId, handballTeamName), minuteOffset = 0, evenHoursOnly = true)
-    observer.addModule(HandballUpcomingModule(handballTeamId, handballTeamName), minuteOffset = 30)
-    observer.addModule(HandballTableModule(handballTeamId, handballTeamName), minuteOffset = 0, oddHoursOnly = true)
+    // Zeitplan: Stats → Modul → Stats → Modul (2 Module pro Stunde)
+    // :00 → PUBG Stats
+    // :15 → Modul (Bundesliga oder Handball)
+    // :30 → PUBG Stats
+    // :45 → Modul (Tagesschau oder Handball)
 
-    // Fussball Bundesliga Tabellen (zur Minute 15, gerade Stunden)
+    // :15 - Bundesliga Tabellen (rotierend)
     observer.addModule(BundesligaTableModule.ersteLiga(), minuteOffset = 15, evenHoursOnly = true)
     observer.addModule(BundesligaTableModule.zweiteLiga(), minuteOffset = 15, oddHoursOnly = true)
 
-    // Tagesschau News (zur Minute 45)
-    observer.addModule(TagesschauNewsModule.news(5), minuteOffset = 45)
+    // :45 - Handball und Tagesschau (rotierend über Stunden)
+    // Stunde 0,3,6... → Handball Ergebnisse
+    // Stunde 1,4,7... → Handball Tabelle
+    // Stunde 2,5,8... → Tagesschau
+    observer.addModule(HandballResultsModule(handballTeamId, handballTeamName), minuteOffset = 45, evenHoursOnly = true)
+    observer.addModule(HandballTableModule(handballTeamId, handballTeamName), minuteOffset = 45, oddHoursOnly = true)
 
     Runtime.getRuntime().addShutdownHook(Thread {
         println("\n🛑 Shutdown Signal empfangen...")
