@@ -6,7 +6,12 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.temporal.TemporalAdjusters
 
 class PubgApiClient(
     private val apiKey: String,
@@ -252,6 +257,144 @@ class PubgApiClient(
 
         } catch (e: Exception) {
             println("❌ Fehler (Recent Stats): ${e.message}")
+            null
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Wochenstatistik (Woche beginnt Montag 6:00 Uhr)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fun fetchWeeklyStats(
+        platform: String,
+        accountId: String,
+        maxMatches: Int = 50
+    ): PlayerStats? {
+        val weekStart = getWeekStartCutoff()
+        return fetchStatsSince(platform, accountId, weekStart, maxMatches, "Woche")
+    }
+
+    /**
+     * Berechnet den Wochenstart: Letzter Montag um 6:00 Uhr.
+     */
+    private fun getWeekStartCutoff(): Instant {
+        val zone = ZoneId.of("Europe/Berlin")
+        val now = ZonedDateTime.now(zone)
+
+        // Finde den letzten Montag (oder heute wenn Montag)
+        val lastMonday = if (now.dayOfWeek == DayOfWeek.MONDAY && now.hour >= 6) {
+            now.toLocalDate()
+        } else {
+            now.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        }
+
+        // Montag 6:00 Uhr
+        val weekStart = lastMonday.atTime(LocalTime.of(6, 0)).atZone(zone)
+
+        // Falls wir vor Montag 6 Uhr sind, gehe zur Vorwoche
+        return if (now.isBefore(weekStart)) {
+            weekStart.minusWeeks(1).toInstant()
+        } else {
+            weekStart.toInstant()
+        }
+    }
+
+    /**
+     * Stats seit einem bestimmten Zeitpunkt sammeln.
+     */
+    private fun fetchStatsSince(
+        platform: String,
+        accountId: String,
+        cutoff: Instant,
+        maxMatches: Int,
+        label: String
+    ): PlayerStats? {
+        return try {
+            println("🌐 Lade $label-Stats für $accountId (seit $cutoff)...")
+
+            val playerResponse = httpClient.send(
+                buildRequest("$baseUrl/shards/$platform/players/$accountId"),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            if (playerResponse.statusCode() != 200) {
+                println("❌ HTTP ${playerResponse.statusCode()} (Spielerdaten)")
+                return null
+            }
+
+            val matchesSection = playerResponse.body().substringAfter("\"matches\"")
+            val matchIds = Regex(""""id"\s*:\s*"([^"]+)"""")
+                .findAll(matchesSection)
+                .map { it.groupValues[1] }
+                .take(maxMatches)
+                .toList()
+
+            println("📍 ${matchIds.size} Matches gefunden...")
+
+            var wins = 0
+            var matches = 0
+            var kills = 0
+            var deaths = 0
+            var damageDealt = 0.0
+            var assists = 0
+            var longestKill = 0.0
+            var headshotKills = 0
+            var topTens = 0
+            var revives = 0
+            var knockdowns = 0
+
+            val createdAtRegex    = Regex(""""createdAt"\s*:\s*"([^"]+)"""")
+            val playerIdRegex     = Regex(""""playerId"\s*:\s*"${Regex.escape(accountId)}"""")
+            val killsRegex        = Regex(""""kills"\s*:\s*(\d+)""")
+            val winPlaceRegex     = Regex(""""winPlace"\s*:\s*(\d+)""")
+            val damageRegex       = Regex(""""damageDealt"\s*:\s*([\d.]+)""")
+            val assistsRegex      = Regex(""""assists"\s*:\s*(\d+)""")
+            val longestKillRegex  = Regex(""""longestKill"\s*:\s*([\d.]+)""")
+            val headshotRegex     = Regex(""""headshotKills"\s*:\s*(\d+)""")
+            val revivesRegex      = Regex(""""revives"\s*:\s*(\d+)""")
+            val knockdownsRegex   = Regex(""""DBNOs"\s*:\s*(\d+)""")
+
+            for ((index, matchId) in matchIds.withIndex()) {
+                println("   Match ${index + 1}/${matchIds.size}: $matchId")
+
+                val matchResponse = rateLimitedSend("$baseUrl/shards/$platform/matches/$matchId")
+                if (matchResponse.statusCode() != 200) continue
+
+                val matchBody = matchResponse.body()
+
+                val createdAt = createdAtRegex.find(matchBody)?.groupValues?.get(1) ?: continue
+                if (Instant.parse(createdAt) < cutoff) {
+                    println("   ⏭️ Match zu alt, überspringe restliche Matches")
+                    break
+                }
+
+                val includedSection = matchBody.substringAfter("\"included\"")
+                val playerIdPos = playerIdRegex.find(includedSection)?.range?.first ?: continue
+
+                val blockStart = includedSection.lastIndexOf("{\"type\":\"participant\"", playerIdPos)
+                    .takeIf { it >= 0 } ?: maxOf(0, playerIdPos - 3000)
+                val blockEnd = minOf(includedSection.length, playerIdPos + 2000)
+                val participantBlock = includedSection.substring(blockStart, blockEnd)
+
+                matches++
+                kills         += killsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                assists       += assistsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                damageDealt   += damageRegex.find(participantBlock)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                headshotKills += headshotRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                revives       += revivesRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                knockdowns    += knockdownsRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val matchLongestKill = longestKillRegex.find(participantBlock)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                if (matchLongestKill > longestKill) longestKill = matchLongestKill
+                val winPlace = winPlaceRegex.find(participantBlock)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                if (winPlace == 1) wins++ else deaths++
+                if (winPlace <= 10) topTens++
+            }
+
+            val result = PlayerStats(wins, matches, kills, deaths, damageDealt, assists, longestKill, headshotKills, topTens, revives, knockdowns)
+            println("✅ $label: ${result.extendedSummary()}")
+            result
+
+        } catch (e: Exception) {
+            println("❌ Fehler ($label Stats): ${e.message}")
             null
         }
     }

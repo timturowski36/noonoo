@@ -288,7 +288,7 @@ class CombinedObserver(
                 val accountId = client.fetchAccountId(playerName, pubgPlatform) ?: return@forEach
 
                 val dailyStats = client.fetchRecentStats(pubgPlatform, accountId, hours = 24, maxMatches = 30)
-                val weeklyStats = client.fetchRecentStats(pubgPlatform, accountId, hours = 168, maxMatches = 50)
+                val weeklyStats = client.fetchWeeklyStats(pubgPlatform, accountId, maxMatches = 50)
 
                 if (dailyStats != null || weeklyStats != null) {
                     val message = formatPubgStats(playerName, dailyStats, weeklyStats)
