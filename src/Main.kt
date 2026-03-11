@@ -36,10 +36,10 @@ fun main() {
     // ═══════════════════════════════════════════════════════════════════════════
     // PUBG KONFIGURATION
     // ═══════════════════════════════════════════════════════════════════════════
-    val pubgPlayers = listOf("brotrustgaming", "philipnc")
+    val pubgPlayers = listOf("brotrustgaming", "philipnc", "chrissi1970")
     val pubgPlatform = "steam"
     val pubgCheckIntervalMinutes = 30
-    val pubgDiscordChannel = "gaming"
+    val pubgDiscordChannel = "allgemein"
 
     // ═══════════════════════════════════════════════════════════════════════════
     // HANDBALL KONFIGURATION
@@ -48,7 +48,7 @@ fun main() {
     val handballTeamName = "HSG RE/OE"
     val handballSeasonFrom = "2025-07-01"
     val handballSeasonTo = "2026-06-30"
-    val handballDiscordChannel = "handball"
+    val handballDiscordChannel = "allgemein"
     val handballCheckIntervalMinutes = 60
     val handballObserverMode = false  // true = kontinuierlich, false = einmalig
 
