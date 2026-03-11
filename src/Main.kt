@@ -5,6 +5,7 @@ import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
 import scheduler.HandballUpcomingModule
 import scheduler.MultiModuleScheduler
+import scheduler.TagesschauNewsModule
 import sources.handball.observer.HandballModule
 import sources.pubg.observer.PubgObserver
 import kotlin.concurrent.thread
@@ -127,6 +128,9 @@ fun runCombinedMode(
     // Fussball Bundesliga Tabellen (zur Minute 15, gerade Stunden)
     observer.addModule(BundesligaTableModule.ersteLiga(), minuteOffset = 15, evenHoursOnly = true)
     observer.addModule(BundesligaTableModule.zweiteLiga(), minuteOffset = 15, oddHoursOnly = true)
+
+    // Tagesschau News (zur Minute 45)
+    observer.addModule(TagesschauNewsModule.news(5), minuteOffset = 45)
 
     Runtime.getRuntime().addShutdownHook(Thread {
         println("\n🛑 Shutdown Signal empfangen...")

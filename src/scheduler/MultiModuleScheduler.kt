@@ -9,6 +9,8 @@ import sources.handball.cache.HandballCache
 import sources.handball.cache.HandballTableCache
 import sources.handball.model.HandballScheduleData
 import sources.handball.model.HandballTableData
+import sources.tagesschau.TagesschauSource
+import sources.tagesschau.model.TagesschauFeed
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -331,5 +333,51 @@ class BundesligaTableModule(
 
         /** 2. Bundesliga Tabelle */
         fun zweiteLiga(maxTeams: Int = 18) = BundesligaTableModule("bl2", maxTeams)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tagesschau Module
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Modul: Tagesschau News
+ */
+class TagesschauNewsModule(
+    private val feed: TagesschauFeed = TagesschauFeed.ALLE,
+    private val maxArticles: Int = 5
+) : ScheduledModule {
+    override val name = "Tagesschau: ${feed.displayName}"
+
+    override fun execute(): String? {
+        val result = TagesschauSource(
+            sources.tagesschau.config.TagesschauModuleConfig(feed = feed, maxArticles = maxArticles)
+        ).fetchArticles()
+
+        return result.getOrNull()?.let { articles ->
+            if (articles.isEmpty()) return null
+            buildString {
+                appendLine("**Tagesschau - ${feed.displayName}**")
+                appendLine()
+                articles.forEach { article ->
+                    appendLine(article.discordFormat())
+                    appendLine("   ${article.link}")
+                }
+            }.trimEnd()
+        }
+    }
+
+    companion object {
+        /** Alle Tagesschau News */
+        fun news(max: Int = 5) = TagesschauNewsModule(TagesschauFeed.ALLE, max)
+
+        /** Sport News */
+        fun sport(max: Int = 5) = TagesschauNewsModule(TagesschauFeed.SPORT, max)
+
+        /** Wirtschaft News */
+        fun wirtschaft(max: Int = 5) = TagesschauNewsModule(TagesschauFeed.WIRTSCHAFT, max)
+
+        /** Faktenfinder (Faktencheck) */
+        fun faktenfinder(max: Int = 5) = TagesschauNewsModule(TagesschauFeed.FAKTENFINDER, max)
     }
 }
