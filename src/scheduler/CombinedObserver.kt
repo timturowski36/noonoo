@@ -2,6 +2,7 @@ package scheduler
 
 import scheduler.discord.DiscordWebhook
 import sources.`pubg-api`.api.PubgApiClient
+import sources.pubg.history.PubgStatsHistory
 import sources.pubg.model.PlayerStats
 import java.time.Instant
 import java.time.LocalDateTime
@@ -293,6 +294,7 @@ class CombinedObserver(
                 if (dailyStats != null || weeklyStats != null) {
                     val message = formatPubgStats(playerName, dailyStats, weeklyStats)
                     discord?.send(message)
+                    PubgStatsHistory.save(playerName, pubgPlatform, dailyStats, weeklyStats)
                     println("   Stats fuer $playerName gesendet")
                 }
             } catch (e: Exception) {
