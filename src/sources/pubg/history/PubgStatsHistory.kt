@@ -7,22 +7,22 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Schreibt PUBG Statistiken progressiv als JSON Lines (JSONL) in eine Datei.
+ * Speichert PUBG Stats-Snapshots als einzelne JSON-Dateien in data/pubg/.
  *
- * Format: Eine JSON-Zeile pro Eintrag, ans Ende der Datei angehängt.
- * Datei: data/pubg_history.jsonl
+ * Pro Aufruf (= ein Stats-Versand) wird eine Datei angelegt:
+ *   data/pubg/2026-03-14_22-30_brotrustgaming.json
  *
- * Beispiel-Eintrag:
- * {"timestamp":"2026-03-14T22:30:00+01:00","player":"brotrustgaming","platform":"steam","type":"daily","matches":5,...}
+ * Die Datei enthält daily + weekly Stats als strukturiertes JSON-Objekt.
  */
 object PubgStatsHistory {
 
-    private val historyFile = File("data/pubg_history.jsonl")
-    private val timestampFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+    private val outputDir = File("data/pubg")
+    private val filenameDateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
+    private val isoFormat = DateTimeFormatter.ISO_OFFSET_DATE_TIME
     private val berlin = ZoneId.of("Europe/Berlin")
 
     /**
-     * Speichert Daily- und/oder Weekly-Stats eines Spielers.
+     * Speichert einen Stats-Snapshot für einen Spieler als JSON-Datei.
      *
      * @param playerName  PUBG-Spielername
      * @param platform    z.B. "steam"
@@ -35,63 +35,61 @@ object PubgStatsHistory {
         dailyStats: PlayerStats?,
         weeklyStats: PlayerStats?
     ) {
-        historyFile.parentFile?.mkdirs()
+        if (dailyStats == null && weeklyStats == null) return
 
-        val now = ZonedDateTime.now(berlin).format(timestampFormatter)
+        outputDir.mkdirs()
 
-        historyFile.appendText(
-            buildString {
-                if (dailyStats != null && dailyStats.matches > 0) {
-                    appendLine(toJsonLine(now, playerName, platform, "daily", dailyStats))
-                }
-                if (weeklyStats != null && weeklyStats.matches > 0) {
-                    appendLine(toJsonLine(now, playerName, platform, "weekly", weeklyStats))
-                }
+        val now = ZonedDateTime.now(berlin)
+        val timestamp = now.format(isoFormat)
+        val filePrefix = now.format(filenameDateFormat)
+        val file = File(outputDir, "${filePrefix}_${playerName}.json")
+
+        val json = buildString {
+            appendLine("{")
+            appendLine("  \"timestamp\": \"$timestamp\",")
+            appendLine("  \"player\": \"${playerName.escape()}\",")
+            appendLine("  \"platform\": \"${platform.escape()}\",")
+
+            if (dailyStats != null && dailyStats.matches > 0) {
+                appendLine("  \"daily\": ${dailyStats.toJson()},")
+            } else {
+                appendLine("  \"daily\": null,")
             }
-        )
-    }
 
-    private fun toJsonLine(
-        timestamp: String,
-        player: String,
-        platform: String,
-        type: String,
-        stats: PlayerStats
-    ): String {
-        return buildString {
-            append("{")
-            appendField("timestamp", timestamp)
-            append(","); appendField("player", player)
-            append(","); appendField("platform", platform)
-            append(","); appendField("type", type)
-            append(","); appendNum("matches", stats.matches)
-            append(","); appendNum("wins", stats.wins)
-            append(","); appendNum("kills", stats.kills)
-            append(","); appendNum("deaths", stats.deaths)
-            append(","); appendDec("kd", stats.kd)
-            append(","); appendDec("damageDealt", stats.damageDealt)
-            append(","); appendDec("avgDamage", stats.avgDamage)
-            append(","); appendNum("assists", stats.assists)
-            append(","); appendNum("headshotKills", stats.headshotKills)
-            append(","); appendDec("headshotRate", stats.headshotRate)
-            append(","); appendNum("topTens", stats.topTens)
-            append(","); appendDec("topTenRate", stats.topTenRate)
-            append(","); appendNum("revives", stats.revives)
-            append(","); appendNum("knockdowns", stats.knockdowns)
-            append(","); appendDec("longestKill", stats.longestKill)
+            if (weeklyStats != null && weeklyStats.matches > 0) {
+                append("  \"weekly\": ${weeklyStats.toJson()}")
+            } else {
+                append("  \"weekly\": null")
+            }
+
+            appendLine()
             append("}")
         }
+
+        file.writeText(json)
+        println("   History gespeichert: ${file.path}")
     }
 
-    private fun StringBuilder.appendField(key: String, value: String) {
-        append("\"$key\":\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+    private fun PlayerStats.toJson(): String = buildString {
+        appendLine("{")
+        appendLine("    \"matches\": $matches,")
+        appendLine("    \"wins\": $wins,")
+        appendLine("    \"kills\": $kills,")
+        appendLine("    \"deaths\": $deaths,")
+        appendLine("    \"kd\": ${"%.2f".format(kd)},")
+        appendLine("    \"damageDealt\": ${"%.2f".format(damageDealt)},")
+        appendLine("    \"avgDamage\": ${"%.2f".format(avgDamage)},")
+        appendLine("    \"assists\": $assists,")
+        appendLine("    \"headshotKills\": $headshotKills,")
+        appendLine("    \"headshotRate\": ${"%.2f".format(headshotRate)},")
+        appendLine("    \"topTens\": $topTens,")
+        appendLine("    \"topTenRate\": ${"%.2f".format(topTenRate)},")
+        appendLine("    \"revives\": $revives,")
+        appendLine("    \"knockdowns\": $knockdowns,")
+        append("    \"longestKill\": ${"%.2f".format(longestKill)}")
+        appendLine()
+        append("  }")
     }
 
-    private fun StringBuilder.appendNum(key: String, value: Int) {
-        append("\"$key\":$value")
-    }
-
-    private fun StringBuilder.appendDec(key: String, value: Double) {
-        append("\"$key\":${"%.2f".format(value)}")
-    }
+    private fun String.escape() = replace("\\", "\\\\").replace("\"", "\\\"")
 }
