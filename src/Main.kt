@@ -30,6 +30,7 @@ fun main() {
     // MODUS AUSWÄHLEN
     // ═══════════════════════════════════════════════════════════════════════════
     // "combined"   = PUBG prüfen + Stats alle 30 Min wenn aktiv + Module zeitversetzt
+    // "example"    = Einmaliger Testlauf aller Module – Ausgabe nur in Konsole, kein Discord
     // "scheduler"  = Multi-Module Scheduler (primär/sekundär versetzt)
     // "observer"   = Alte Observer (separate Threads)
     // "single"     = Einmaliger Durchlauf
@@ -41,6 +42,12 @@ fun main() {
             val bl1Config = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf")
             val bl2Config = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf")
             runCombinedMode(pubgConfig, bl1Config, bl2Config)
+        }
+        "example" -> {
+            val pubgConfig = PubgObserverModuleConfig.load()
+            val bl1Config = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf")
+            val bl2Config = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf")
+            runExampleMode(pubgConfig, bl1Config, bl2Config)
         }
         "scheduler" -> runSchedulerMode(
             handballTeamId = "handball4all.westfalen.1309001",
@@ -65,6 +72,56 @@ fun main() {
             handballDiscordChannel = "allgemein"
         )
     }
+}
+
+/**
+ * Example-Modus: Führt alle konfigurierten Module einmalig aus und gibt die
+ * Ergebnisse in der Konsole aus. Kein Discord-Versand. Gut zum Testen.
+ */
+fun runExampleMode(
+    pubgConfig: PubgObserverModuleConfig,
+    bl1Config: BundesligaModuleConfig,
+    bl2Config: BundesligaModuleConfig
+) {
+    println("\n--- EXAMPLE MODUS (kein Discord) ---\n")
+
+    // PUBG Stats (ersten Spieler aus der Config)
+    val firstPlayer = pubgConfig.players.firstOrNull()
+    if (firstPlayer != null) {
+        println("=== PUBG: $firstPlayer ===")
+        val apiKey = config.EnvConfig.pubgApiKey()
+        if (apiKey != null) {
+            val client = sources.`pubg-api`.api.PubgApiClient(apiKey)
+            val accountId = client.fetchAccountId(firstPlayer, pubgConfig.platform)
+            if (accountId != null) {
+                val daily  = client.fetchRecentStats(pubgConfig.platform, accountId, hours = 24, maxMatches = 30)
+                val weekly = client.fetchWeeklyStats(pubgConfig.platform, accountId, maxMatches = 50)
+                if (daily != null && daily.matches > 0)   println(daily.basicFormat("Tagesstatistik:"))
+                if (weekly != null && weekly.matches > 0) { println(weekly.basicFormat("Wochenstatistik:")); println(weekly.weeklyExtras()) }
+                if ((daily == null || daily.matches == 0) && (weekly == null || weekly.matches == 0))
+                    println("  Keine Matches gefunden.")
+            } else {
+                println("  Account nicht gefunden.")
+            }
+        } else {
+            println("  PUBG API Key fehlt.")
+        }
+        println()
+    }
+
+    // 1. Bundesliga
+    println("=== ${bl1Config.ligaName} (Lieblingsverein: '${bl1Config.lieblingsverein}') ===")
+    val bl1Result = BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein).execute()
+    println(bl1Result ?: "  Keine Daten.")
+    println()
+
+    // 2. Bundesliga
+    println("=== ${bl2Config.ligaName} (Lieblingsverein: '${bl2Config.lieblingsverein}') ===")
+    val bl2Result = BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein).execute()
+    println(bl2Result ?: "  Keine Daten.")
+    println()
+
+    println("--- Beispielausfuehrung abgeschlossen ---")
 }
 
 /**
