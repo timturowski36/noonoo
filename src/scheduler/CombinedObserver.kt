@@ -1,9 +1,11 @@
 package scheduler
 
+import config.EnvConfig
 import scheduler.discord.DiscordWebhook
 import sources.`pubg-api`.api.PubgApiClient
 import sources.pubg.history.PubgStatsHistory
 import sources.pubg.model.PlayerStats
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -17,12 +19,16 @@ import java.time.temporal.ChronoUnit
  * @param minuteOffset Wann es laufen soll (0 = zur vollen Stunde, 30 = zur halben Stunde)
  * @param evenHoursOnly Nur zu geraden Stunden (14:00, 16:00, ...)
  * @param oddHoursOnly Nur zu ungeraden Stunden (15:00, 17:00, ...)
+ * @param days Nur an diesen Wochentagen (leer = täglich)
+ * @param channel Optionaler eigener Discord-Channel (überschreibt den Standard-Channel)
  */
 data class ScheduledModuleEntry(
     val module: ScheduledModule,
     val minuteOffset: Int,
     val evenHoursOnly: Boolean = false,
-    val oddHoursOnly: Boolean = false
+    val oddHoursOnly: Boolean = false,
+    val days: List<DayOfWeek> = emptyList(),
+    val channel: String? = null
 )
 
 /**
@@ -76,9 +82,11 @@ class CombinedObserver(
         module: ScheduledModule,
         minuteOffset: Int = 0,
         evenHoursOnly: Boolean = false,
-        oddHoursOnly: Boolean = false
+        oddHoursOnly: Boolean = false,
+        days: List<DayOfWeek> = emptyList(),
+        channel: String? = null
     ): CombinedObserver {
-        scheduledModules.add(ScheduledModuleEntry(module, minuteOffset, evenHoursOnly, oddHoursOnly))
+        scheduledModules.add(ScheduledModuleEntry(module, minuteOffset, evenHoursOnly, oddHoursOnly, days, channel))
         return this
     }
 
@@ -189,6 +197,7 @@ class CombinedObserver(
         val currentMinute = now.minute
         val currentHour = now.hour
         val isEvenHour = currentHour % 2 == 0
+        val today = now.dayOfWeek
 
         scheduledModules.forEach { entry ->
             // Prüfe ob die Zeit für dieses Modul gekommen ist
@@ -201,11 +210,22 @@ class CombinedObserver(
             if (entry.evenHoursOnly && !isEvenHour) return@forEach
             if (entry.oddHoursOnly && isEvenHour) return@forEach
 
+            // Prüfe Wochentag-Einschränkung
+            if (entry.days.isNotEmpty() && today !in entry.days) return@forEach
+
             // Erstelle eindeutigen Slot-Key für diese Stunde und dieses Modul
             val slotKey = "${now.hour}:${entry.minuteOffset}:${entry.module.name}"
 
             // Prüfe ob bereits in diesem Slot ausgeführt
             if (slotKey in executedModuleSlots) return@forEach
+
+            // Discord-Webhook auflösen: eigener Channel oder Standard
+            val moduleDiscord = if (entry.channel != null) {
+                val url = EnvConfig.discordWebhook(entry.channel)
+                if (url != null) DiscordWebhook(url) else discord
+            } else {
+                discord
+            }
 
             // Modul ausführen
             println("\n   [Minute ${entry.minuteOffset}] ${entry.module.name}...")
@@ -215,13 +235,13 @@ class CombinedObserver(
                     result == null -> {
                         println("   ${entry.module.name}: Keine Daten")
                     }
-                    discord == null -> {
+                    moduleDiscord == null -> {
                         println("   ${entry.module.name}: OK (kein Webhook)")
                         println(result.lines().take(5).joinToString("\n") { "      $it" })
                         if (result.lines().size > 5) println("      ...")
                     }
                     else -> {
-                        discord.send(result)
+                        moduleDiscord.send(result)
                         println("   ${entry.module.name}: Gesendet")
                     }
                 }

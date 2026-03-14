@@ -1,4 +1,6 @@
 import config.EnvConfig
+import config.modules.BundesligaModuleConfig
+import config.modules.PubgObserverModuleConfig
 import scheduler.BundesligaTableModule
 import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
@@ -18,119 +20,95 @@ fun main() {
     ╚═══════════════════════════════════════════════════════════════╝
     """.trimIndent())
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // MODUS AUSWÄHLEN
-    // ═══════════════════════════════════════════════════════════════════════════
-    // "combined"   = PUBG prüfen + Stats alle 45 Min wenn aktiv + Module zur vollen Stunde
-    // "scheduler"  = Multi-Module Scheduler (primär/sekundär versetzt)
-    // "observer"   = Alte Observer (separate Threads)
-    // "single"     = Einmaliger Durchlauf
-    val mode = "combined"
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // MODUL-KONFIGURATION
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Welche Module sollen laufen?
-    val enablePubgObserver = true
-    val enableHandballModule = true
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PUBG KONFIGURATION
-    // ═══════════════════════════════════════════════════════════════════════════
-    val pubgPlayers = listOf("brotrustgaming", "philipnc", "chrissi1970")
-    val pubgPlatform = "steam"
-    val pubgCheckIntervalMinutes = 30
-    val pubgDiscordChannel = "allgemein"
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // HANDBALL KONFIGURATION
-    // ═══════════════════════════════════════════════════════════════════════════
-    val handballTeamId = "handball4all.westfalen.1309001"
-    val handballTeamName = "HSG RE/OE"
-    val handballSeasonFrom = "2025-07-01"
-    val handballSeasonTo = "2026-06-30"
-    val handballDiscordChannel = "allgemein"
-    val handballCheckIntervalMinutes = 60
-    val handballObserverMode = false  // true = kontinuierlich, false = einmalig
-
-    // ═══════════════════════════════════════════════════════════════════════════
-
     // Config laden
     if (!EnvConfig.load()) {
         println("❌ Konfiguration konnte nicht geladen werden!")
         return
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MODUS AUSWÄHLEN
+    // ═══════════════════════════════════════════════════════════════════════════
+    // "combined"   = PUBG prüfen + Stats alle 30 Min wenn aktiv + Module zeitversetzt
+    // "scheduler"  = Multi-Module Scheduler (primär/sekundär versetzt)
+    // "observer"   = Alte Observer (separate Threads)
+    // "single"     = Einmaliger Durchlauf
+    val mode = "combined"
+
     when (mode) {
-        "combined" -> runCombinedMode(
-            pubgPlayers = pubgPlayers,
-            pubgPlatform = pubgPlatform,
-            discordChannel = pubgDiscordChannel,
-            handballTeamId = handballTeamId,
-            handballTeamName = handballTeamName
-        )
+        "combined" -> {
+            val pubgConfig = PubgObserverModuleConfig.load()
+            val bl1Config = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf")
+            val bl2Config = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf")
+            runCombinedMode(pubgConfig, bl1Config, bl2Config)
+        }
         "scheduler" -> runSchedulerMode(
-            handballTeamId = handballTeamId,
-            handballTeamName = handballTeamName,
-            discordChannel = handballDiscordChannel
+            handballTeamId = "handball4all.westfalen.1309001",
+            handballTeamName = "HSG RE/OE",
+            discordChannel = "allgemein"
         )
         "observer" -> runObserverMode(
-            enablePubgObserver = enablePubgObserver,
-            enableHandballModule = enableHandballModule,
-            pubgPlayers = pubgPlayers,
-            pubgPlatform = pubgPlatform,
-            pubgCheckIntervalMinutes = pubgCheckIntervalMinutes,
-            pubgDiscordChannel = pubgDiscordChannel,
-            handballTeamId = handballTeamId,
-            handballSeasonFrom = handballSeasonFrom,
-            handballSeasonTo = handballSeasonTo,
-            handballDiscordChannel = handballDiscordChannel,
-            handballCheckIntervalMinutes = handballCheckIntervalMinutes
+            pubgPlayers = listOf("brotrustgaming", "philipnc", "chrissi1970"),
+            pubgPlatform = "steam",
+            pubgCheckIntervalMinutes = 30,
+            pubgDiscordChannel = "allgemein",
+            handballTeamId = "handball4all.westfalen.1309001",
+            handballSeasonFrom = "2025-07-01",
+            handballSeasonTo = "2026-06-30",
+            handballDiscordChannel = "allgemein",
+            handballCheckIntervalMinutes = 60
         )
         else -> runSingleMode(
-            handballTeamId = handballTeamId,
-            handballSeasonFrom = handballSeasonFrom,
-            handballSeasonTo = handballSeasonTo,
-            handballDiscordChannel = handballDiscordChannel
+            handballTeamId = "handball4all.westfalen.1309001",
+            handballSeasonFrom = "2025-07-01",
+            handballSeasonTo = "2026-06-30",
+            handballDiscordChannel = "allgemein"
         )
     }
 }
 
 /**
- * Combined-Modus: PUBG Stats alle 30 Min, Module dazwischen bei :15 und :45
+ * Combined-Modus: PUBG Stats alle 30 Min, Module dazwischen zeitversetzt.
+ * Konfiguration kommt aus config/modules/*.conf
  */
 fun runCombinedMode(
-    pubgPlayers: List<String>,
-    pubgPlatform: String,
-    discordChannel: String,
-    handballTeamId: String,
-    handballTeamName: String
+    pubgConfig: PubgObserverModuleConfig,
+    bl1Config: BundesligaModuleConfig,
+    bl2Config: BundesligaModuleConfig
 ) {
-    val webhookUrl = EnvConfig.discordWebhook(discordChannel)
+    val pubgWebhookUrl = EnvConfig.discordWebhook(pubgConfig.channel)
 
     val observer = CombinedObserver(
-        pubgPlayers = pubgPlayers,
-        pubgPlatform = pubgPlatform,
-        discordWebhookUrl = webhookUrl,
-        pubgIntervalMinutes = 30,   // PUBG Stats alle 30 Min (:00 und :30)
-        checkIntervalMinutes = 5     // Status-Check alle 5 Min
+        pubgPlayers = pubgConfig.players,
+        pubgPlatform = pubgConfig.platform,
+        discordWebhookUrl = pubgWebhookUrl,
+        pubgIntervalMinutes = pubgConfig.statsIntervalMinutes,
+        checkIntervalMinutes = pubgConfig.checkIntervalMinutes
     )
 
-    // Zeitplan: Stats → Modul → Stats → Modul (2 Module pro Stunde)
-    // :00 → PUBG Stats
-    // :15 → Modul (Bundesliga oder Handball)
-    // :30 → PUBG Stats
-    // :45 → Modul (Tagesschau oder Handball)
+    // 1. Bundesliga (aus bundesliga_1.conf)
+    observer.addModule(
+        module = BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein),
+        minuteOffset = bl1Config.minuteOffset,
+        evenHoursOnly = bl1Config.evenHoursOnly,
+        oddHoursOnly = bl1Config.oddHoursOnly,
+        days = bl1Config.days,
+        channel = bl1Config.channel
+    )
 
-    // :15 - Bundesliga Tabellen (rotierend)
-    observer.addModule(BundesligaTableModule.ersteLiga(), minuteOffset = 15, evenHoursOnly = true)
-    observer.addModule(BundesligaTableModule.zweiteLiga(), minuteOffset = 15, oddHoursOnly = true)
+    // 2. Bundesliga (aus bundesliga_2.conf)
+    observer.addModule(
+        module = BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein),
+        minuteOffset = bl2Config.minuteOffset,
+        evenHoursOnly = bl2Config.evenHoursOnly,
+        oddHoursOnly = bl2Config.oddHoursOnly,
+        days = bl2Config.days,
+        channel = bl2Config.channel
+    )
 
-    // :45 - Handball und Tagesschau (rotierend über Stunden)
-    // Stunde 0,3,6... → Handball Ergebnisse
-    // Stunde 1,4,7... → Handball Tabelle
-    // Stunde 2,5,8... → Tagesschau
+    // Handball (feste Konfiguration – noch kein eigenes .conf)
+    val handballTeamId = "handball4all.westfalen.1309001"
+    val handballTeamName = "HSG RE/OE"
     observer.addModule(HandballResultsModule(handballTeamId, handballTeamName), minuteOffset = 45, evenHoursOnly = true)
     observer.addModule(HandballTableModule(handballTeamId, handballTeamName), minuteOffset = 45, oddHoursOnly = true)
 
@@ -176,11 +154,9 @@ fun runSchedulerMode(
 }
 
 /**
- * Observer-Modus: Alte Funktionalität mit separaten Threads
+ * Observer-Modus: Alte Funktionalität mit separaten Threads (Legacy)
  */
 fun runObserverMode(
-    enablePubgObserver: Boolean,
-    enableHandballModule: Boolean,
     pubgPlayers: List<String>,
     pubgPlatform: String,
     pubgCheckIntervalMinutes: Int,
@@ -189,7 +165,9 @@ fun runObserverMode(
     handballSeasonFrom: String,
     handballSeasonTo: String,
     handballDiscordChannel: String,
-    handballCheckIntervalMinutes: Int
+    handballCheckIntervalMinutes: Int,
+    enablePubgObserver: Boolean = true,
+    enableHandballModule: Boolean = true
 ) {
     val runningThreads = mutableListOf<Thread>()
     var pubgObserver: PubgObserver? = null

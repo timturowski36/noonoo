@@ -274,7 +274,8 @@ class HandballTableModule(
  */
 class BundesligaTableModule(
     private val liga: String = "bl1",  // bl1 = 1. Bundesliga, bl2 = 2. Bundesliga
-    private val maxTeams: Int = 18
+    private val maxTeams: Int = 18,
+    private val lieblingsverein: String = ""
 ) : ScheduledModule {
     override val name = when (liga) {
         "bl1" -> "Fussball: 1. Bundesliga Tabelle"
@@ -307,10 +308,13 @@ class BundesligaTableModule(
         return buildString {
             appendLine("**$ligaName - Tabelle**")
             appendLine("```")
-            appendLine(" #  | Team                | Sp | S  | U | N  | Tore  | Diff | Pkt")
-            appendLine("----|---------------------|----|----|---|----|-------|------|----")
+            appendLine("   #  | Team                | Sp | S  | U | N  | Tore  | Diff | Pkt")
+            appendLine("------|---------------------|----|----|---|----|-------|------|----")
 
             tabelle.forEach { e ->
+                val isFavorite = lieblingsverein.isNotEmpty() &&
+                    e.shortName.contains(lieblingsverein, ignoreCase = true)
+                val marker = if (isFavorite) ">> " else "   "
                 val platz = e.platz.toString().padStart(2)
                 val team = e.shortName.take(19).padEnd(19)
                 val spiele = e.matches.toString().padStart(2)
@@ -321,7 +325,7 @@ class BundesligaTableModule(
                 val diff = (if (e.goalDiff >= 0) "+${e.goalDiff}" else "${e.goalDiff}").padStart(4)
                 val punkte = e.points.toString().padStart(3)
 
-                appendLine(" $platz | $team | $spiele | $siege | $unent | $nied | $tore | $diff | $punkte")
+                appendLine("$marker$platz | $team | $spiele | $siege | $unent | $nied | $tore | $diff | $punkte")
             }
             append("```")
         }
@@ -329,10 +333,12 @@ class BundesligaTableModule(
 
     companion object {
         /** 1. Bundesliga Tabelle */
-        fun ersteLiga(maxTeams: Int = 18) = BundesligaTableModule("bl1", maxTeams)
+        fun ersteLiga(maxTeams: Int = 18, lieblingsverein: String = "") =
+            BundesligaTableModule("bl1", maxTeams, lieblingsverein)
 
         /** 2. Bundesliga Tabelle */
-        fun zweiteLiga(maxTeams: Int = 18) = BundesligaTableModule("bl2", maxTeams)
+        fun zweiteLiga(maxTeams: Int = 18, lieblingsverein: String = "") =
+            BundesligaTableModule("bl2", maxTeams, lieblingsverein)
     }
 }
 
