@@ -343,6 +343,51 @@ class BundesligaTableModule(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Bundesliga Nächste Spiele
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Modul: Nächste Spiele eines Vereins (1. oder 2. Bundesliga)
+ */
+class BundesligaNaechsteSpieleModule(
+    private val team: String,
+    private val liga: String = "bl1",
+    private val anzahl: Int = 3
+) : ScheduledModule {
+    override val name = "Fussball: Nächste Spiele $team"
+
+    private val apiClient = sources.bundesliga.api.BundesligaApiClient()
+
+    override fun execute(): String? {
+        val saison = ermittleAktuelleSaison()
+        val spiele = apiClient.fetchNaechsteSpiele(team, liga, saison).take(anzahl)
+        if (spiele.isEmpty()) return null
+
+        val ligaName = when (liga) {
+            "bl1" -> "1. Bundesliga"
+            "bl2" -> "2. Bundesliga"
+            else  -> liga
+        }
+
+        return buildString {
+            appendLine("**$team – Nächste Spiele ($ligaName)**")
+            appendLine("```")
+            spiele.forEach { spiel ->
+                val spieltag = "Spieltag ${spiel.spieltag}".padEnd(12)
+                val datum    = spiel.datum.padEnd(12)
+                appendLine("$spieltag  $datum  ${spiel.heimmannschaft} vs ${spiel.gastmannschaft}")
+            }
+            append("```")
+        }
+    }
+
+    private fun ermittleAktuelleSaison(): String {
+        val now = LocalDate.now()
+        return if (now.monthValue >= 8) now.year.toString() else (now.year - 1).toString()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Tagesschau Module
 // ═══════════════════════════════════════════════════════════════════════════════
 

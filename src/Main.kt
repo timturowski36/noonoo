@@ -1,6 +1,8 @@
 import config.EnvConfig
 import config.modules.BundesligaModuleConfig
+import config.modules.NaechsteSpieleModuleConfig
 import config.modules.PubgObserverModuleConfig
+import scheduler.BundesligaNaechsteSpieleModule
 import scheduler.BundesligaTableModule
 import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
@@ -28,12 +30,14 @@ fun main() {
     val mode = "combined"
     // ═══════════════════════════════════════════════════════════════════════════
 
-    val pubgConfig = PubgObserverModuleConfig.load()
-    val bl1Config  = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf")
-    val bl2Config  = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf")
+    val pubgConfig     = PubgObserverModuleConfig.load()
+    val bl1Config      = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf")
+    val bl2Config      = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf")
+    val spieleSchalke  = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_schalke.conf")
+    val spieleDortmund = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_dortmund.conf")
 
     when (mode) {
-        "combined" -> runCombinedMode(pubgConfig, bl1Config, bl2Config)
+        "combined" -> runCombinedMode(pubgConfig, bl1Config, bl2Config, spieleSchalke, spieleDortmund)
         "single"   -> runSingleMode(pubgConfig, bl1Config, bl2Config)
         "example"  -> runExampleMode(pubgConfig, bl1Config, bl2Config)
         else       -> println("❌ Unbekannter Modus: $mode")
@@ -51,7 +55,9 @@ fun main() {
 fun runCombinedMode(
     pubgConfig: PubgObserverModuleConfig,
     bl1Config: BundesligaModuleConfig,
-    bl2Config: BundesligaModuleConfig
+    bl2Config: BundesligaModuleConfig,
+    spieleSchalke: NaechsteSpieleModuleConfig,
+    spieleDortmund: NaechsteSpieleModuleConfig
 ) {
     val observer = CombinedObserver(
         pubgPlayers = pubgConfig.players,
@@ -77,6 +83,16 @@ fun runCombinedMode(
         days          = bl2Config.days,
         channel       = bl2Config.channel
     )
+
+    // Nächste Spiele (aus naechste_spiele_*.conf)
+    listOf(spieleSchalke, spieleDortmund).forEach { cfg ->
+        observer.addModule(
+            module       = BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl),
+            minuteOffset = cfg.minuteOffset,
+            days         = cfg.days,
+            channel      = cfg.channel
+        )
+    }
 
     // Handball (noch kein eigenes .conf)
     observer.addModule(HandballResultsModule("handball4all.westfalen.1309001", "HSG RE/OE"), minuteOffset = 45, evenHoursOnly = true)
