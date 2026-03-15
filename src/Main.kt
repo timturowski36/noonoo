@@ -37,10 +37,16 @@ fun main() {
     val spieleDortmund = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_dortmund.conf")
 
     when (mode) {
-        "combined" -> runCombinedMode(pubgConfig, bl1Config, bl2Config, spieleSchalke, spieleDortmund)
-        "single"   -> runSingleMode(pubgConfig, bl1Config, bl2Config)
-        "example"  -> runExampleMode(pubgConfig, bl1Config, bl2Config)
-        else       -> println("❌ Unbekannter Modus: $mode")
+        "combined"   -> runCombinedMode(pubgConfig, bl1Config, bl2Config, spieleSchalke, spieleDortmund)
+        "single"     -> runSingleMode(pubgConfig, bl1Config, bl2Config)
+        "example"    -> runExampleMode(pubgConfig, bl1Config, bl2Config)
+        // ──────────────────────────────────────────────────────────────────────
+        // sport-test  →  Alle Sportmodule sofort, nur Konsole (kein Discord)
+        // sport-send  →  Alle Sportmodule sofort → Discord (ignoriert Wochentag)
+        // ──────────────────────────────────────────────────────────────────────
+        "sport-test" -> runSportTestMode(bl1Config, bl2Config, spieleSchalke, spieleDortmund)
+        "sport-send" -> runSportSendMode(bl1Config, bl2Config, spieleSchalke, spieleDortmund)
+        else         -> println("❌ Unbekannter Modus: $mode")
     }
 }
 
@@ -182,6 +188,68 @@ fun runExampleMode(
 
     println("=== ${bl2Config.ligaName} ===")
     println(BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein).execute() ?: "  Keine Daten.")
+
+    println("\n--- Abgeschlossen ---")
+}
+
+/**
+ * Testlauf aller Sportmodule — nur Konsole, kein Discord.
+ * Wochentag-Filter wird ignoriert (ideal zum schnellen Testen).
+ */
+fun runSportTestMode(
+    bl1Config: BundesligaModuleConfig,
+    bl2Config: BundesligaModuleConfig,
+    spieleSchalke: NaechsteSpieleModuleConfig,
+    spieleDortmund: NaechsteSpieleModuleConfig
+) {
+    println("\n--- SPORT-TEST MODUS (nur Konsole, kein Discord) ---\n")
+
+    println("=== ${bl1Config.ligaName} ===")
+    println(BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein).execute() ?: "  Keine Daten.")
+    println()
+
+    println("=== ${bl2Config.ligaName} ===")
+    println(BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein).execute() ?: "  Keine Daten.")
+    println()
+
+    listOf(spieleSchalke, spieleDortmund).forEach { cfg ->
+        println("=== Nächste Spiele: ${cfg.team} ===")
+        println(BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl).execute() ?: "  Keine Daten.")
+        println()
+    }
+
+    println("--- Abgeschlossen ---")
+}
+
+/**
+ * Einmaliger Versand aller Sportmodule → Discord.
+ * Wochentag-Filter wird ignoriert — z.B. zum manuellen Testen.
+ */
+fun runSportSendMode(
+    bl1Config: BundesligaModuleConfig,
+    bl2Config: BundesligaModuleConfig,
+    spieleSchalke: NaechsteSpieleModuleConfig,
+    spieleDortmund: NaechsteSpieleModuleConfig
+) {
+    println("\n--- SPORT-SEND MODUS (→ Discord) ---\n")
+
+    listOf(
+        bl1Config to BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein),
+        bl2Config to BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein)
+    ).forEach { (cfg, module) ->
+        val result = module.execute() ?: run { println("⚠ ${module.name}: Keine Daten."); return@forEach }
+        EnvConfig.discordWebhook(cfg.channel)
+            ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
+        println("✅ ${module.name} → #${cfg.channel}")
+    }
+
+    listOf(spieleSchalke, spieleDortmund).forEach { cfg ->
+        val module = BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl)
+        val result = module.execute() ?: run { println("⚠ ${module.name}: Keine Daten."); return@forEach }
+        EnvConfig.discordWebhook(cfg.channel)
+            ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
+        println("✅ ${module.name} → #${cfg.channel}")
+    }
 
     println("\n--- Abgeschlossen ---")
 }
