@@ -7,6 +7,7 @@ import scheduler.BundesligaTableModule
 import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
+import scheduler.HandballUpcomingModule
 import sources.`pubg-api`.api.PubgApiClient
 
 fun main() {
@@ -218,6 +219,21 @@ fun runSportTestMode(
         println()
     }
 
+    val handballId   = "handball4all.westfalen.1309001"
+    val handballName = "HSG RE/OE"
+
+    println("=== Handball: Tabelle ===")
+    println(HandballTableModule(handballId, handballName).execute() ?: "  Keine Daten.")
+    println()
+
+    println("=== Handball: Nächste Spiele ===")
+    println(HandballUpcomingModule(handballId, handballName).execute() ?: "  Keine Daten.")
+    println()
+
+    println("=== Handball: Letzte Ergebnisse ===")
+    println(HandballResultsModule(handballId, handballName).execute() ?: "  Keine Daten.")
+    println()
+
     println("--- Abgeschlossen ---")
 }
 
@@ -249,6 +265,21 @@ fun runSportSendMode(
         EnvConfig.discordWebhook(cfg.channel)
             ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
         println("✅ ${module.name} → #${cfg.channel}")
+    }
+
+    val handballId      = "handball4all.westfalen.1309001"
+    val handballName    = "HSG RE/OE"
+    val handballChannel = "sportnews"
+
+    listOf(
+        HandballTableModule(handballId, handballName)    to "Handball Tabelle",
+        HandballUpcomingModule(handballId, handballName) to "Handball Nächste Spiele",
+        HandballResultsModule(handballId, handballName)  to "Handball Letzte Ergebnisse"
+    ).forEach { (module, label) ->
+        val result = module.execute() ?: run { println("⚠ $label: Keine Daten."); return@forEach }
+        EnvConfig.discordWebhook(handballChannel)
+            ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
+        println("✅ $label → #$handballChannel")
     }
 
     println("\n--- Abgeschlossen ---")
