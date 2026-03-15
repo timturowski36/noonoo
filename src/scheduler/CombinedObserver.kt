@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
  * @param oddHoursOnly Nur zu ungeraden Stunden (15:00, 17:00, ...)
  * @param days Nur an diesen Wochentagen (leer = täglich)
  * @param channel Optionaler eigener Discord-Channel (überschreibt den Standard-Channel)
+ * @param targetHour Nur zu dieser Stunde (z.B. 19 = nur um 19:xx Uhr, null = jede Stunde)
  */
 data class ScheduledModuleEntry(
     val module: ScheduledModule,
@@ -28,7 +29,8 @@ data class ScheduledModuleEntry(
     val evenHoursOnly: Boolean = false,
     val oddHoursOnly: Boolean = false,
     val days: List<DayOfWeek> = emptyList(),
-    val channel: String? = null
+    val channel: String? = null,
+    val targetHour: Int? = null
 )
 
 /**
@@ -84,9 +86,10 @@ class CombinedObserver(
         evenHoursOnly: Boolean = false,
         oddHoursOnly: Boolean = false,
         days: List<DayOfWeek> = emptyList(),
-        channel: String? = null
+        channel: String? = null,
+        targetHour: Int? = null
     ): CombinedObserver {
-        scheduledModules.add(ScheduledModuleEntry(module, minuteOffset, evenHoursOnly, oddHoursOnly, days, channel))
+        scheduledModules.add(ScheduledModuleEntry(module, minuteOffset, evenHoursOnly, oddHoursOnly, days, channel, targetHour))
         return this
     }
 
@@ -204,7 +207,10 @@ class CombinedObserver(
 
             if (!isInWindow) return@forEach
 
-            // Prüfe Stunden-Einschränkung
+            // Prüfe exakte Ziel-Stunde (z.B. nur um 19 Uhr)
+            if (entry.targetHour != null && currentHour != entry.targetHour) return@forEach
+
+            // Prüfe Stunden-Einschränkung (gerade/ungerade)
             if (entry.evenHoursOnly && !isEvenHour) return@forEach
             if (entry.oddHoursOnly && isEvenHour) return@forEach
 

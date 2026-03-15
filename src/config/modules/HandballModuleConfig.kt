@@ -14,7 +14,9 @@ data class HandballModuleConfig(
     val evenHoursOnly: Boolean,
     val oddHoursOnly: Boolean,
     /** Leere Liste = jeden Tag, sonst nur an diesen Wochentagen */
-    val days: List<DayOfWeek>
+    val days: List<DayOfWeek>,
+    /** Nur zu dieser Uhrzeit (z.B. 19 = 19:xx Uhr), null = jede Stunde */
+    val hour: Int? = null
 ) {
     companion object {
         private val dayMap = mapOf(
@@ -40,7 +42,8 @@ data class HandballModuleConfig(
                 minuteOffset  = props["minute_offset"]?.toIntOrNull()  ?: 0,
                 evenHoursOnly = props["even_hours_only"]?.toBoolean()  ?: false,
                 oddHoursOnly  = props["odd_hours_only"]?.toBoolean()   ?: false,
-                days          = days
+                days          = days,
+                hour          = props["hour"]?.toIntOrNull()
             ).also {
                 val daysStr = if (it.days.isEmpty()) "täglich" else it.days.joinToString(", ") { d -> d.name.lowercase().replaceFirstChar { c -> c.uppercase() } }
                 println("✅ [Handball: ${it.teamName}] :${it.minuteOffset}, Channel: ${it.channel}, Tage: $daysStr")

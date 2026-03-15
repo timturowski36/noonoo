@@ -12,7 +12,9 @@ data class NaechsteSpieleModuleConfig(
     val anzahl: Int,
     val channel: String,
     val minuteOffset: Int,
-    val days: List<DayOfWeek>
+    val days: List<DayOfWeek>,
+    /** Nur zu dieser Uhrzeit (z.B. 19 = 19:xx Uhr), null = jede Stunde */
+    val hour: Int? = null
 ) {
     val ligaName: String get() = when (liga) {
         "bl1" -> "1. Bundesliga"
@@ -43,7 +45,8 @@ data class NaechsteSpieleModuleConfig(
                 anzahl       = props["anzahl"]?.toIntOrNull() ?: 3,
                 channel      = props["channel"] ?: "sportnews",
                 minuteOffset = props["minute_offset"]?.toIntOrNull() ?: 0,
-                days         = days
+                days         = days,
+                hour         = props["hour"]?.toIntOrNull()
             ).also {
                 val daysStr = if (it.days.isEmpty()) "täglich" else it.days.joinToString(", ") { d -> d.name.lowercase().replaceFirstChar { c -> c.uppercase() } }
                 println("✅ [Nächste Spiele] ${it.team} (${it.ligaName}), ${it.anzahl} Spiele, Channel: ${it.channel}, Tage: $daysStr")

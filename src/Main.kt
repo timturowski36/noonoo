@@ -91,7 +91,8 @@ fun runProductionMode(c: AppConfigs) {
         evenHoursOnly = c.bl1.evenHoursOnly,
         oddHoursOnly  = c.bl1.oddHoursOnly,
         days          = c.bl1.days,
-        channel       = c.bl1.channel
+        channel       = c.bl1.channel,
+        targetHour    = c.bl1.hour
     )
     observer.addModule(
         module        = BundesligaTableModule.zweiteLiga(lieblingsverein = c.bl2.lieblingsverein),
@@ -99,7 +100,8 @@ fun runProductionMode(c: AppConfigs) {
         evenHoursOnly = c.bl2.evenHoursOnly,
         oddHoursOnly  = c.bl2.oddHoursOnly,
         days          = c.bl2.days,
-        channel       = c.bl2.channel
+        channel       = c.bl2.channel,
+        targetHour    = c.bl2.hour
     )
 
     // ── Nächste Spiele Bundesliga ─────────────────────────────────────────────
@@ -108,7 +110,8 @@ fun runProductionMode(c: AppConfigs) {
             module       = BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl),
             minuteOffset = cfg.minuteOffset,
             days         = cfg.days,
-            channel      = cfg.channel
+            channel      = cfg.channel,
+            targetHour   = cfg.hour
         )
     }
 
@@ -119,7 +122,8 @@ fun runProductionMode(c: AppConfigs) {
         evenHoursOnly = c.hsgErgebnisse.evenHoursOnly,
         oddHoursOnly  = c.hsgErgebnisse.oddHoursOnly,
         days          = c.hsgErgebnisse.days,
-        channel       = c.hsgErgebnisse.channel
+        channel       = c.hsgErgebnisse.channel,
+        targetHour    = c.hsgErgebnisse.hour
     )
     observer.addModule(
         module        = HandballUpcomingModule(c.hsgNaechsteSpiele.teamId, c.hsgNaechsteSpiele.teamName),
@@ -127,7 +131,8 @@ fun runProductionMode(c: AppConfigs) {
         evenHoursOnly = c.hsgNaechsteSpiele.evenHoursOnly,
         oddHoursOnly  = c.hsgNaechsteSpiele.oddHoursOnly,
         days          = c.hsgNaechsteSpiele.days,
-        channel       = c.hsgNaechsteSpiele.channel
+        channel       = c.hsgNaechsteSpiele.channel,
+        targetHour    = c.hsgNaechsteSpiele.hour
     )
     observer.addModule(
         module        = HandballTableModule(c.hsgTabelle.teamId, c.hsgTabelle.teamName),
@@ -135,7 +140,8 @@ fun runProductionMode(c: AppConfigs) {
         evenHoursOnly = c.hsgTabelle.evenHoursOnly,
         oddHoursOnly  = c.hsgTabelle.oddHoursOnly,
         days          = c.hsgTabelle.days,
-        channel       = c.hsgTabelle.channel
+        channel       = c.hsgTabelle.channel,
+        targetHour    = c.hsgTabelle.hour
     )
 
     Runtime.getRuntime().addShutdownHook(Thread { observer.stop() })
