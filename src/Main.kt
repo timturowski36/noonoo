@@ -9,6 +9,7 @@ import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
 import scheduler.HandballUpcomingModule
+import sources.handballstatistiken.HandballScorerModule
 
 fun main() {
     println("""
@@ -164,7 +165,12 @@ fun runTestMode(c: AppConfigs) {
         "Nächste Spiele: ${c.spieleDortmund.team}" to BundesligaNaechsteSpieleModule(c.spieleDortmund.team, c.spieleDortmund.liga, c.spieleDortmund.anzahl),
         "Handball: Ergebnisse"            to HandballResultsModule(c.hsgErgebnisse.teamId,     c.hsgErgebnisse.teamName),
         "Handball: Nächste Spiele"        to HandballUpcomingModule(c.hsgNaechsteSpiele.teamId, c.hsgNaechsteSpiele.teamName),
-        "Handball: Tabelle"               to HandballTableModule(c.hsgTabelle.teamId,           c.hsgTabelle.teamName)
+        "Handball: Tabelle"               to HandballTableModule(c.hsgTabelle.teamId,           c.hsgTabelle.teamName),
+        "Handball: Torjägertabelle NRW"   to HandballScorerModule(
+            url           = "https://handballstatistiken.de/NRW/2526/300268",
+            highlightTeam = "HSG RE/OE",
+            limit         = 15
+        )
     )
 
     modules.forEach { (label, module) ->
