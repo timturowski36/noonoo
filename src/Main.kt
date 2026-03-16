@@ -27,7 +27,7 @@ fun main() {
     // ═══════════════════════════════════════════════════════════════════════════
     // "production"  →  Dauerbetrieb: alle Module nach Zeitplan, Discord-Versand
     // "test"        →  Einmaliger Durchlauf aller Module, nur Konsolenausgabe
-    val mode = "production"
+    val mode = "test"
     // ═══════════════════════════════════════════════════════════════════════════
 
     val configs = loadAllConfigs()
