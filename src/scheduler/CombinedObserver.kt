@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
  * @param oddHoursOnly Nur zu ungeraden Stunden (15:00, 17:00, ...)
  * @param days Nur an diesen Wochentagen (leer = täglich)
  * @param channel Optionaler eigener Discord-Channel (überschreibt den Standard-Channel)
+ * @param targetHour Nur zu dieser Stunde (z.B. 19 = nur um 19:xx Uhr, null = jede Stunde)
  */
 data class ScheduledModuleEntry(
     val module: ScheduledModule,
@@ -28,7 +29,8 @@ data class ScheduledModuleEntry(
     val evenHoursOnly: Boolean = false,
     val oddHoursOnly: Boolean = false,
     val days: List<DayOfWeek> = emptyList(),
-    val channel: String? = null
+    val channel: String? = null,
+    val targetHour: Int? = null
 )
 
 /**
@@ -84,9 +86,10 @@ class CombinedObserver(
         evenHoursOnly: Boolean = false,
         oddHoursOnly: Boolean = false,
         days: List<DayOfWeek> = emptyList(),
-        channel: String? = null
+        channel: String? = null,
+        targetHour: Int? = null
     ): CombinedObserver {
-        scheduledModules.add(ScheduledModuleEntry(module, minuteOffset, evenHoursOnly, oddHoursOnly, days, channel))
+        scheduledModules.add(ScheduledModuleEntry(module, minuteOffset, evenHoursOnly, oddHoursOnly, days, channel, targetHour))
         return this
     }
 
@@ -147,6 +150,9 @@ class CombinedObserver(
 
     /**
      * Hauptlogik: Prüft Status und führt Module aus.
+     *
+     * Sport-Module laufen IMMER nach ihrem Zeitplan (unabhängig von PUBG).
+     * PUBG-Stats werden NUR gesendet wenn jemand aktiv spielt.
      */
     private fun checkAndProcess() {
         val now = LocalDateTime.now()
@@ -154,25 +160,25 @@ class CombinedObserver(
 
         println("\n[$timestamp] Pruefe Status...")
 
-        // 1. Prüfe PUBG Status
+        // 1. Zeitversetzte Module immer ausführen (unabhängig von PUBG)
+        runScheduledModules(now)
+
+        // 2. PUBG: Prüfe ob jemand spielt
         val playingNow = checkWhosPlaying()
 
         if (playingNow.isEmpty()) {
-            println("   Niemand spielt gerade PUBG - pausiere alle Ausgaben")
+            println("   Niemand spielt gerade PUBG")
             if (currentlyPlaying.isNotEmpty()) {
                 println("   Session beendet")
                 currentlyPlaying.clear()
                 lastPubgStatsTime = null
-                executedModuleSlots.clear()  // Reset für nächste Session
             }
-            printNextInfo(now, isActive = false)
             return
         }
 
-        // Ab hier: Mindestens ein Spieler ist online
+        // Ab hier: Mindestens ein Spieler ist online → Stats senden
         println("   Aktive Spieler: ${playingNow.joinToString(", ")}")
 
-        // 2. PUBG Stats senden (alle X Minuten)
         val shouldSendStats = lastPubgStatsTime == null ||
             ChronoUnit.MINUTES.between(lastPubgStatsTime, now) >= pubgIntervalMinutes
 
@@ -183,11 +189,6 @@ class CombinedObserver(
             val minutesUntilNext = pubgIntervalMinutes - ChronoUnit.MINUTES.between(lastPubgStatsTime, now)
             println("   Naechste PUBG Stats in $minutesUntilNext Minuten")
         }
-
-        // 3. Zeitversetzte Module ausführen
-        runScheduledModules(now)
-
-        printNextInfo(now, isActive = true)
     }
 
     /**
@@ -206,7 +207,10 @@ class CombinedObserver(
 
             if (!isInWindow) return@forEach
 
-            // Prüfe Stunden-Einschränkung
+            // Prüfe exakte Ziel-Stunde (z.B. nur um 19 Uhr)
+            if (entry.targetHour != null && currentHour != entry.targetHour) return@forEach
+
+            // Prüfe Stunden-Einschränkung (gerade/ungerade)
             if (entry.evenHoursOnly && !isEvenHour) return@forEach
             if (entry.oddHoursOnly && isEvenHour) return@forEach
 

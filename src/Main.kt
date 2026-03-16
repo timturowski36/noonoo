@@ -1,5 +1,6 @@
 import config.EnvConfig
 import config.modules.BundesligaModuleConfig
+import config.modules.HandballModuleConfig
 import config.modules.NaechsteSpieleModuleConfig
 import config.modules.PubgObserverModuleConfig
 import scheduler.BundesligaNaechsteSpieleModule
@@ -8,7 +9,6 @@ import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
 import scheduler.HandballUpcomingModule
-import sources.`pubg-api`.api.PubgApiClient
 
 fun main() {
     println("""
@@ -25,262 +25,153 @@ fun main() {
     // ═══════════════════════════════════════════════════════════════════════════
     // MODUS AUSWÄHLEN
     // ═══════════════════════════════════════════════════════════════════════════
-    // "combined"  →  Dauerbetrieb: PUBG + Module nach Zeitplan, sendet an Discord
-    // "single"    →  Einmaliger Durchlauf aller Module, sendet an Discord
-    // "example"   →  Testlauf aller Module, Ausgabe nur in Konsole (kein Discord)
-    val mode = "combined"
+    // "production"  →  Dauerbetrieb: alle Module nach Zeitplan, Discord-Versand
+    // "test"        →  Einmaliger Durchlauf aller Module, nur Konsolenausgabe
+    val mode = "test"
     // ═══════════════════════════════════════════════════════════════════════════
 
-    val pubgConfig     = PubgObserverModuleConfig.load()
-    val bl1Config      = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf")
-    val bl2Config      = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf")
-    val spieleSchalke  = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_schalke.conf")
-    val spieleDortmund = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_dortmund.conf")
+    val configs = loadAllConfigs()
 
     when (mode) {
-        "combined"   -> runCombinedMode(pubgConfig, bl1Config, bl2Config, spieleSchalke, spieleDortmund)
-        "single"     -> runSingleMode(pubgConfig, bl1Config, bl2Config)
-        "example"    -> runExampleMode(pubgConfig, bl1Config, bl2Config)
-        // ──────────────────────────────────────────────────────────────────────
-        // sport-test  →  Alle Sportmodule sofort, nur Konsole (kein Discord)
-        // sport-send  →  Alle Sportmodule sofort → Discord (ignoriert Wochentag)
-        // ──────────────────────────────────────────────────────────────────────
-        "sport-test" -> runSportTestMode(bl1Config, bl2Config, spieleSchalke, spieleDortmund)
-        "sport-send" -> runSportSendMode(bl1Config, bl2Config, spieleSchalke, spieleDortmund)
-        else         -> println("❌ Unbekannter Modus: $mode")
+        "production" -> runProductionMode(configs)
+        "test"       -> runTestMode(configs)
+        else         -> println("❌ Unbekannter Modus: $mode (gültig: production, test)")
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Konfigurationen
+// ═══════════════════════════════════════════════════════════════════════════════
+
+data class AppConfigs(
+    val pubg:              PubgObserverModuleConfig,
+    val bl1:               BundesligaModuleConfig,
+    val bl2:               BundesligaModuleConfig,
+    val spieleSchalke:     NaechsteSpieleModuleConfig,
+    val spieleDortmund:    NaechsteSpieleModuleConfig,
+    val hsgTabelle:        HandballModuleConfig,
+    val hsgNaechsteSpiele: HandballModuleConfig,
+    val hsgErgebnisse:     HandballModuleConfig
+)
+
+fun loadAllConfigs() = AppConfigs(
+    pubg              = PubgObserverModuleConfig.load(),
+    bl1               = BundesligaModuleConfig.load("config/modules/bundesliga_1.conf"),
+    bl2               = BundesligaModuleConfig.load("config/modules/bundesliga_2.conf"),
+    spieleSchalke     = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_schalke.conf"),
+    spieleDortmund    = NaechsteSpieleModuleConfig.load("config/modules/naechste_spiele_dortmund.conf"),
+    hsgTabelle        = HandballModuleConfig.load("config/modules/handball_tabelle.conf"),
+    hsgNaechsteSpiele = HandballModuleConfig.load("config/modules/handball_naechste_spiele.conf"),
+    hsgErgebnisse     = HandballModuleConfig.load("config/modules/handball_ergebnisse.conf")
+)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODI
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Dauerbetrieb: PUBG Observer läuft kontinuierlich, Module werden zeitversetzt
- * ausgeführt. Alles wird an Discord gesendet.
+ * Dauerbetrieb (Production):
+ * - PUBG Observer: alle X Minuten prüfen ob jemand spielt → Stats an #allgemein
+ * - Alle anderen Module: laufen nach ihrem Zeitplan aus den .conf-Dateien
+ *   unabhängig von PUBG-Aktivität → jeweils in ihren konfigurierten Channel
  */
-fun runCombinedMode(
-    pubgConfig: PubgObserverModuleConfig,
-    bl1Config: BundesligaModuleConfig,
-    bl2Config: BundesligaModuleConfig,
-    spieleSchalke: NaechsteSpieleModuleConfig,
-    spieleDortmund: NaechsteSpieleModuleConfig
-) {
+fun runProductionMode(c: AppConfigs) {
     val observer = CombinedObserver(
-        pubgPlayers = pubgConfig.players,
-        pubgPlatform = pubgConfig.platform,
-        discordWebhookUrl = EnvConfig.discordWebhook(pubgConfig.channel),
-        pubgIntervalMinutes = pubgConfig.statsIntervalMinutes,
-        checkIntervalMinutes = pubgConfig.checkIntervalMinutes
+        pubgPlayers          = c.pubg.players,
+        pubgPlatform         = c.pubg.platform,
+        discordWebhookUrl    = EnvConfig.discordWebhook(c.pubg.channel),
+        pubgIntervalMinutes  = c.pubg.statsIntervalMinutes,
+        checkIntervalMinutes = c.pubg.checkIntervalMinutes
     )
 
+    // ── Bundesliga ────────────────────────────────────────────────────────────
     observer.addModule(
-        module        = BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein),
-        minuteOffset  = bl1Config.minuteOffset,
-        evenHoursOnly = bl1Config.evenHoursOnly,
-        oddHoursOnly  = bl1Config.oddHoursOnly,
-        days          = bl1Config.days,
-        channel       = bl1Config.channel
+        module        = BundesligaTableModule.ersteLiga(lieblingsverein = c.bl1.lieblingsverein),
+        minuteOffset  = c.bl1.minuteOffset,
+        evenHoursOnly = c.bl1.evenHoursOnly,
+        oddHoursOnly  = c.bl1.oddHoursOnly,
+        days          = c.bl1.days,
+        channel       = c.bl1.channel,
+        targetHour    = c.bl1.hour
     )
     observer.addModule(
-        module        = BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein),
-        minuteOffset  = bl2Config.minuteOffset,
-        evenHoursOnly = bl2Config.evenHoursOnly,
-        oddHoursOnly  = bl2Config.oddHoursOnly,
-        days          = bl2Config.days,
-        channel       = bl2Config.channel
+        module        = BundesligaTableModule.zweiteLiga(lieblingsverein = c.bl2.lieblingsverein),
+        minuteOffset  = c.bl2.minuteOffset,
+        evenHoursOnly = c.bl2.evenHoursOnly,
+        oddHoursOnly  = c.bl2.oddHoursOnly,
+        days          = c.bl2.days,
+        channel       = c.bl2.channel,
+        targetHour    = c.bl2.hour
     )
 
-    // Nächste Spiele (aus naechste_spiele_*.conf)
-    listOf(spieleSchalke, spieleDortmund).forEach { cfg ->
+    // ── Nächste Spiele Bundesliga ─────────────────────────────────────────────
+    listOf(c.spieleSchalke, c.spieleDortmund).forEach { cfg ->
         observer.addModule(
             module       = BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl),
             minuteOffset = cfg.minuteOffset,
             days         = cfg.days,
-            channel      = cfg.channel
+            channel      = cfg.channel,
+            targetHour   = cfg.hour
         )
     }
 
-    // Handball (noch kein eigenes .conf)
-    observer.addModule(HandballResultsModule("handball4all.westfalen.1309001", "HSG RE/OE"), minuteOffset = 45, evenHoursOnly = true)
-    observer.addModule(HandballTableModule("handball4all.westfalen.1309001",   "HSG RE/OE"), minuteOffset = 45, oddHoursOnly  = true)
+    // ── Handball HSG RE/OE ────────────────────────────────────────────────────
+    observer.addModule(
+        module        = HandballResultsModule(c.hsgErgebnisse.teamId, c.hsgErgebnisse.teamName),
+        minuteOffset  = c.hsgErgebnisse.minuteOffset,
+        evenHoursOnly = c.hsgErgebnisse.evenHoursOnly,
+        oddHoursOnly  = c.hsgErgebnisse.oddHoursOnly,
+        days          = c.hsgErgebnisse.days,
+        channel       = c.hsgErgebnisse.channel,
+        targetHour    = c.hsgErgebnisse.hour
+    )
+    observer.addModule(
+        module        = HandballUpcomingModule(c.hsgNaechsteSpiele.teamId, c.hsgNaechsteSpiele.teamName),
+        minuteOffset  = c.hsgNaechsteSpiele.minuteOffset,
+        evenHoursOnly = c.hsgNaechsteSpiele.evenHoursOnly,
+        oddHoursOnly  = c.hsgNaechsteSpiele.oddHoursOnly,
+        days          = c.hsgNaechsteSpiele.days,
+        channel       = c.hsgNaechsteSpiele.channel,
+        targetHour    = c.hsgNaechsteSpiele.hour
+    )
+    observer.addModule(
+        module        = HandballTableModule(c.hsgTabelle.teamId, c.hsgTabelle.teamName),
+        minuteOffset  = c.hsgTabelle.minuteOffset,
+        evenHoursOnly = c.hsgTabelle.evenHoursOnly,
+        oddHoursOnly  = c.hsgTabelle.oddHoursOnly,
+        days          = c.hsgTabelle.days,
+        channel       = c.hsgTabelle.channel,
+        targetHour    = c.hsgTabelle.hour
+    )
 
     Runtime.getRuntime().addShutdownHook(Thread { observer.stop() })
     observer.start()
 }
 
 /**
- * Einmaliger Durchlauf: Alle Module werden einmal ausgeführt und an Discord gesendet.
+ * Testlauf (Test):
+ * - Alle Module werden einmal sofort ausgeführt
+ * - Ausgabe nur in der Konsole, kein Discord
+ * - Wochentag- und Zeitplan-Filter werden ignoriert
  */
-fun runSingleMode(
-    pubgConfig: PubgObserverModuleConfig,
-    bl1Config: BundesligaModuleConfig,
-    bl2Config: BundesligaModuleConfig
-) {
-    println("\n--- SINGLE MODUS ---\n")
+fun runTestMode(c: AppConfigs) {
+    println("\n--- TEST MODUS (nur Konsole, kein Discord) ---\n")
 
-    val apiKey = EnvConfig.pubgApiKey()
-    if (apiKey != null) {
-        val client = PubgApiClient(apiKey)
-        val pubgWebhook = EnvConfig.discordWebhook(pubgConfig.channel)
-            ?.let { scheduler.discord.DiscordWebhook(it) }
+    val modules = listOf(
+        "1. Bundesliga Tabelle"           to BundesligaTableModule.ersteLiga(lieblingsverein = c.bl1.lieblingsverein),
+        "2. Bundesliga Tabelle"           to BundesligaTableModule.zweiteLiga(lieblingsverein = c.bl2.lieblingsverein),
+        "Nächste Spiele: ${c.spieleSchalke.team}"  to BundesligaNaechsteSpieleModule(c.spieleSchalke.team,  c.spieleSchalke.liga,  c.spieleSchalke.anzahl),
+        "Nächste Spiele: ${c.spieleDortmund.team}" to BundesligaNaechsteSpieleModule(c.spieleDortmund.team, c.spieleDortmund.liga, c.spieleDortmund.anzahl),
+        "Handball: Ergebnisse"            to HandballResultsModule(c.hsgErgebnisse.teamId,     c.hsgErgebnisse.teamName),
+        "Handball: Nächste Spiele"        to HandballUpcomingModule(c.hsgNaechsteSpiele.teamId, c.hsgNaechsteSpiele.teamName),
+        "Handball: Tabelle"               to HandballTableModule(c.hsgTabelle.teamId,           c.hsgTabelle.teamName)
+    )
 
-        pubgConfig.players.forEach { player ->
-            val accountId = client.fetchAccountId(player, pubgConfig.platform) ?: return@forEach
-            val daily  = client.fetchRecentStats(pubgConfig.platform, accountId, hours = 24, maxMatches = 30)
-            val weekly = client.fetchWeeklyStats(pubgConfig.platform, accountId, maxMatches = 50)
-            if (daily != null || weekly != null) {
-                val msg = buildString {
-                    appendLine("👥 Player: $player")
-                    if (daily  != null && daily.matches  > 0) { appendLine(); appendLine(daily.basicFormat("📅 Tagesstatistik:")) }
-                    if (weekly != null && weekly.matches > 0) { appendLine(); appendLine(weekly.basicFormat("🗓 Wochenstatistik:")); append(weekly.weeklyExtras()) }
-                }.trimEnd()
-                pubgWebhook?.send(msg)
-                println("✅ PUBG $player gesendet")
-            }
-        }
-    }
-
-    listOf(
-        bl1Config to BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein),
-        bl2Config to BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein)
-    ).forEach { (cfg, module) ->
-        val result = module.execute() ?: return@forEach
-        val webhook = EnvConfig.discordWebhook(cfg.channel)?.let { scheduler.discord.DiscordWebhook(it) }
-        webhook?.send(result)
-        println("✅ ${module.name} gesendet")
-    }
-
-    println("\n--- Abgeschlossen ---")
-}
-
-/**
- * Testlauf: Alle Module werden einmal ausgeführt, Ausgabe nur in der Konsole.
- * Kein Discord-Versand. Ideal zum Prüfen ob die Konfiguration stimmt.
- */
-fun runExampleMode(
-    pubgConfig: PubgObserverModuleConfig,
-    bl1Config: BundesligaModuleConfig,
-    bl2Config: BundesligaModuleConfig
-) {
-    println("\n--- EXAMPLE MODUS (kein Discord) ---\n")
-
-    val apiKey = EnvConfig.pubgApiKey()
-    if (apiKey != null) {
-        val client = PubgApiClient(apiKey)
-        val firstPlayer = pubgConfig.players.firstOrNull() ?: return
-        println("=== PUBG: $firstPlayer ===")
-        val accountId = client.fetchAccountId(firstPlayer, pubgConfig.platform)
-        if (accountId != null) {
-            val daily  = client.fetchRecentStats(pubgConfig.platform, accountId, hours = 24, maxMatches = 30)
-            val weekly = client.fetchWeeklyStats(pubgConfig.platform, accountId, maxMatches = 50)
-            if (daily  != null && daily.matches  > 0) println(daily.basicFormat("Tagesstatistik:"))
-            if (weekly != null && weekly.matches > 0) { println(weekly.basicFormat("Wochenstatistik:")); println(weekly.weeklyExtras()) }
-            if ((daily == null || daily.matches == 0) && (weekly == null || weekly.matches == 0)) println("  Keine Matches gefunden.")
-        } else {
-            println("  Account nicht gefunden.")
-        }
+    modules.forEach { (label, module) ->
+        println("=== $label ===")
+        println(module.execute() ?: "  Keine Daten.")
         println()
     }
-
-    println("=== ${bl1Config.ligaName} ===")
-    println(BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein).execute() ?: "  Keine Daten.")
-    println()
-
-    println("=== ${bl2Config.ligaName} ===")
-    println(BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein).execute() ?: "  Keine Daten.")
-
-    println("\n--- Abgeschlossen ---")
-}
-
-/**
- * Testlauf aller Sportmodule — nur Konsole, kein Discord.
- * Wochentag-Filter wird ignoriert (ideal zum schnellen Testen).
- */
-fun runSportTestMode(
-    bl1Config: BundesligaModuleConfig,
-    bl2Config: BundesligaModuleConfig,
-    spieleSchalke: NaechsteSpieleModuleConfig,
-    spieleDortmund: NaechsteSpieleModuleConfig
-) {
-    println("\n--- SPORT-TEST MODUS (nur Konsole, kein Discord) ---\n")
-
-    println("=== ${bl1Config.ligaName} ===")
-    println(BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein).execute() ?: "  Keine Daten.")
-    println()
-
-    println("=== ${bl2Config.ligaName} ===")
-    println(BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein).execute() ?: "  Keine Daten.")
-    println()
-
-    listOf(spieleSchalke, spieleDortmund).forEach { cfg ->
-        println("=== Nächste Spiele: ${cfg.team} ===")
-        println(BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl).execute() ?: "  Keine Daten.")
-        println()
-    }
-
-    val handballId   = "handball4all.westfalen.1309001"
-    val handballName = "HSG RE/OE"
-
-    println("=== Handball: Tabelle ===")
-    println(HandballTableModule(handballId, handballName).execute() ?: "  Keine Daten.")
-    println()
-
-    println("=== Handball: Nächste Spiele ===")
-    println(HandballUpcomingModule(handballId, handballName).execute() ?: "  Keine Daten.")
-    println()
-
-    println("=== Handball: Letzte Ergebnisse ===")
-    println(HandballResultsModule(handballId, handballName).execute() ?: "  Keine Daten.")
-    println()
 
     println("--- Abgeschlossen ---")
-}
-
-/**
- * Einmaliger Versand aller Sportmodule → Discord.
- * Wochentag-Filter wird ignoriert — z.B. zum manuellen Testen.
- */
-fun runSportSendMode(
-    bl1Config: BundesligaModuleConfig,
-    bl2Config: BundesligaModuleConfig,
-    spieleSchalke: NaechsteSpieleModuleConfig,
-    spieleDortmund: NaechsteSpieleModuleConfig
-) {
-    println("\n--- SPORT-SEND MODUS (→ Discord) ---\n")
-
-    listOf(
-        bl1Config to BundesligaTableModule.ersteLiga(lieblingsverein = bl1Config.lieblingsverein),
-        bl2Config to BundesligaTableModule.zweiteLiga(lieblingsverein = bl2Config.lieblingsverein)
-    ).forEach { (cfg, module) ->
-        val result = module.execute() ?: run { println("⚠ ${module.name}: Keine Daten."); return@forEach }
-        EnvConfig.discordWebhook(cfg.channel)
-            ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
-        println("✅ ${module.name} → #${cfg.channel}")
-    }
-
-    listOf(spieleSchalke, spieleDortmund).forEach { cfg ->
-        val module = BundesligaNaechsteSpieleModule(cfg.team, cfg.liga, cfg.anzahl)
-        val result = module.execute() ?: run { println("⚠ ${module.name}: Keine Daten."); return@forEach }
-        EnvConfig.discordWebhook(cfg.channel)
-            ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
-        println("✅ ${module.name} → #${cfg.channel}")
-    }
-
-    val handballId      = "handball4all.westfalen.1309001"
-    val handballName    = "HSG RE/OE"
-    val handballChannel = "sportnews"
-
-    listOf(
-        HandballTableModule(handballId, handballName)    to "Handball Tabelle",
-        HandballUpcomingModule(handballId, handballName) to "Handball Nächste Spiele",
-        HandballResultsModule(handballId, handballName)  to "Handball Letzte Ergebnisse"
-    ).forEach { (module, label) ->
-        val result = module.execute() ?: run { println("⚠ $label: Keine Daten."); return@forEach }
-        EnvConfig.discordWebhook(handballChannel)
-            ?.let { scheduler.discord.DiscordWebhook(it).send(result) }
-        println("✅ $label → #$handballChannel")
-    }
-
-    println("\n--- Abgeschlossen ---")
 }
