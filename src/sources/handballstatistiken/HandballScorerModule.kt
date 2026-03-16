@@ -16,13 +16,15 @@ import sources.handballstatistiken.model.HandballScorerData
  *
  * Im Produktivmodus über CombinedObserver.addModule(module, ...).
  *
- * @param url           Vollständige URL der Statistik-Seite
- * @param highlightTeam Mannschaft die in der Ausgabe hervorgehoben wird (z.B. "HSG RE/OE")
- * @param limit         Maximale Anzahl anzuzeigender Spieler (Standard: 15)
+ * @param url                Vollständige URL der Statistik-Seite
+ * @param highlightTeam      Mannschaft die in der Ausgabe hervorgehoben wird (z.B. "HSG RE/OE")
+ * @param highlightTeamOnly  true → zeigt nur Spieler des Highlight-Teams (Standard: false)
+ * @param limit              Maximale Anzahl anzuzeigender Spieler (Standard: 15)
  */
 class HandballScorerModule(
     private val url: String,
     private val highlightTeam: String? = null,
+    private val highlightTeamOnly: Boolean = false,
     private val limit: Int = 15
 ) : ScheduledModule {
 
@@ -38,7 +40,7 @@ class HandballScorerModule(
 
         printConsole(data)
 
-        return data.discordFormat(highlightTeam, limit)
+        return data.discordFormat(highlightTeam, highlightTeamOnly, limit)
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -57,7 +59,12 @@ class HandballScorerModule(
         println(header)
         println("─".repeat(header.length))
 
-        data.topScorer(limit).forEach { p ->
+        val rows = if (highlightTeamOnly && highlightTeam != null)
+            data.byMannschaft(highlightTeam).take(limit)
+        else
+            data.topScorer(limit)
+
+        rows.forEach { p ->
             val highlight = highlightTeam != null &&
                 p.mannschaft.contains(highlightTeam, ignoreCase = true)
             val marker = if (highlight) "►" else " "

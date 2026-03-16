@@ -35,8 +35,15 @@ data class HandballScorerData(
      *
      * Pl.  Name                    Mannschaft              Sp  Tore  7m   T/Sp
      */
-    fun discordFormat(highlightTeam: String? = null, limit: Int = 15): String {
-        val rows = topScorer(limit)
+    fun discordFormat(
+        highlightTeam: String? = null,
+        highlightTeamOnly: Boolean = false,
+        limit: Int = 15
+    ): String {
+        val rows = if (highlightTeamOnly && highlightTeam != null)
+            byMannschaft(highlightTeam).take(limit)
+        else
+            topScorer(limit)
         return buildString {
             appendLine("🏆 **Torjägerliste** | Stand: ${fetchedAt.format(dateFormatter)}")
             appendLine("```")
