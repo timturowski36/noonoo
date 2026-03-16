@@ -1,6 +1,6 @@
 package sources.handballstatistiken
 
-import scheduler.MultiModuleScheduler.ScheduledModule
+import scheduler.ScheduledModule
 import sources.handballstatistiken.api.HandballStatistikenClient
 import sources.handballstatistiken.model.HandballScorerData
 
