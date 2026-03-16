@@ -1,30 +1,22 @@
 package sources.handballstatistiken.api
 
-import sources.claude.api.WebFetcher
 import sources.handballstatistiken.model.HandballScorerData
 import sources.handballstatistiken.model.HandballScorerStats
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.LocalDateTime
 
 /**
- * Lädt und parst die Torjägertabelle von handballstatistiken.de.
+ * Lädt die Torjägertabelle von handballstatistiken.de über die JSON-Backend-API.
  *
- * Die Seite liefert eine HTML-Tabelle mit folgenden Spalten (0-basiert):
- *   0  #          Rang
- *   1  Name       Spielername
- *   2  Mannschaft Vereinsname
- *   3  TrNr.      Trikotnummer
- *   4  Spiele
- *   5  Tore
- *   6  Feldtore
- *   7  7m Tore
- *   8  7m gew.    7-Meter geworfen
- *   9  7m %
- *  10  letztes Spiel
- *  11  Tore/Spiel
- *  12  Feldt./Spiel
- *  13  Verw.
- *  14  2 Min.
- *  15  Disq.
+ * Die Seite ist eine JavaScript-SPA; die eigentlichen Daten liefert:
+ *   GET https://handballstatistiken.de/backend/api.php?season=<season>&ligaID=<ligaID>
+ *
+ * season und ligaID werden aus der Frontend-URL abgeleitet:
+ *   https://handballstatistiken.de/<bundesland>/<season>/<ligaID>
+ *   z.B. https://handballstatistiken.de/NRW/2526/300268
  *
  * Nutzung:
  *   val client = HandballStatistikenClient()
@@ -32,7 +24,9 @@ import java.time.LocalDateTime
  */
 class HandballStatistikenClient {
 
-    private val fetcher = WebFetcher()
+    private val httpClient = HttpClient.newBuilder()
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build()
 
     // ──────────────────────────────────────────────────────────────────────────
     // Öffentliche API
@@ -42,12 +36,18 @@ class HandballStatistikenClient {
         println("📊 [HandballStatistiken] Lade Torjägertabelle ...")
         println("   URL: $url")
 
-        val content = fetcher.fetch(url) ?: return null
+        val apiUrl = buildApiUrl(url) ?: run {
+            println("❌ [HandballStatistiken] URL konnte nicht geparst werden: $url")
+            return null
+        }
 
-        val players = parseTable(content.html)
+        println("   API: $apiUrl")
+
+        val json = fetchJson(apiUrl) ?: return null
+        val players = parseJson(json)
 
         if (players.isEmpty()) {
-            println("❌ [HandballStatistiken] Keine Spieler in der Tabelle gefunden")
+            println("❌ [HandballStatistiken] Keine Spieler in der API-Antwort gefunden")
             return null
         }
 
@@ -61,96 +61,169 @@ class HandballStatistikenClient {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // HTML-Parsing
+    // URL-Aufbau
     // ──────────────────────────────────────────────────────────────────────────
 
     /**
-     * Extrahiert alle Datenzeilen aus der ersten Tabelle auf der Seite
-     * und wandelt sie in HandballScorerStats-Objekte um.
+     * Wandelt die Frontend-URL in die Backend-API-URL um.
+     *
+     * Frontend: https://handballstatistiken.de/NRW/2526/300268
+     * API:      https://handballstatistiken.de/backend/api.php?season=2526&ligaID=300268
      */
-    private fun parseTable(html: String): List<HandballScorerStats> {
-        // Suche <tbody> … </tbody>
-        val tbodyRegex = Regex("""<tbody[^>]*>([\s\S]*?)</tbody>""", RegexOption.IGNORE_CASE)
-        val tbodyMatch = tbodyRegex.find(html) ?: run {
-            println("⚠️  [HandballStatistiken] Kein <tbody> gefunden – versuche direkt <tr>")
-            return parseRows(html)
-        }
-        return parseRows(tbodyMatch.groupValues[1])
+    private fun buildApiUrl(frontendUrl: String): String? {
+        // Segmente nach dem Host extrahieren: /NRW/2526/300268
+        val path = try { URI.create(frontendUrl).path } catch (e: Exception) { return null }
+        val segments = path.trim('/').split('/')
+        if (segments.size < 3) return null
+
+        val season = segments[1]
+        val ligaId = segments[2]
+
+        if (season.isBlank() || ligaId.isBlank()) return null
+
+        val host = frontendUrl.substringBefore(path)
+        return "$host/backend/api.php?season=$season&ligaID=$ligaId"
     }
 
-    private fun parseRows(html: String): List<HandballScorerStats> {
-        val trRegex = Regex("""<tr[^>]*>([\s\S]*?)</tr>""", RegexOption.IGNORE_CASE)
-        val players = mutableListOf<HandballScorerStats>()
+    // ──────────────────────────────────────────────────────────────────────────
+    // HTTP
+    // ──────────────────────────────────────────────────────────────────────────
 
-        for (trMatch in trRegex.findAll(html)) {
-            val row = trMatch.groupValues[1]
-            val cells = extractCells(row)
-
-            // Header-Zeilen überspringen (weniger als 16 Zellen oder erster Wert ist kein Int)
-            if (cells.size < 16) continue
-            val rang = cells[0].toIntOrNull() ?: continue
-
-            val player = parsePlayer(rang, cells) ?: continue
-            players.add(player)
-        }
-
-        return players
-    }
-
-    /**
-     * Gibt den reinen Text aller <td>-Zellen einer Tabellenzeile zurück.
-     */
-    private fun extractCells(rowHtml: String): List<String> {
-        val tdRegex = Regex("""<td[^>]*>([\s\S]*?)</td>""", RegexOption.IGNORE_CASE)
-        return tdRegex.findAll(rowHtml).map { match ->
-            stripHtml(match.groupValues[1]).trim()
-        }.toList()
-    }
-
-    /**
-     * Entfernt HTML-Tags und dekodiert Entities.
-     */
-    private fun stripHtml(html: String): String =
-        html
-            .replace(Regex("""<[^>]+>"""), " ")
-            .replace("&nbsp;", " ")
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace(Regex("""&#(\d+);""")) { m ->
-                m.groupValues[1].toIntOrNull()?.toChar()?.toString() ?: ""
-            }
-            .replace(Regex("""\s+"""), " ")
-            .trim()
-
-    /**
-     * Baut aus einer Zeile (16+ Zellen) ein HandballScorerStats-Objekt.
-     */
-    private fun parsePlayer(rang: Int, cells: List<String>): HandballScorerStats? {
+    private fun fetchJson(url: String): String? {
         return try {
-            HandballScorerStats(
-                rang                  = rang,
-                name                  = cells[1],
-                mannschaft            = cells[2],
-                trNr                  = cells[3],
-                spiele                = cells[4].toIntOrNull() ?: 0,
-                tore                  = cells[5].toIntOrNull() ?: 0,
-                feldtore              = cells[6].toIntOrNull() ?: 0,
-                siebenmeterTore       = cells[7].toIntOrNull() ?: 0,
-                siebenmeterGeworfen   = cells[8].toIntOrNull() ?: 0,
-                siebenmeterProzent    = cells[9],
-                letztesSpiel          = cells[10].ifBlank { "-" },
-                toreProSpiel          = cells[11].replace(",", ".").toDoubleOrNull() ?: 0.0,
-                feldtoreProSpiel      = cells[12].replace(",", ".").toDoubleOrNull() ?: 0.0,
-                verwarnungen          = cells[13].toIntOrNull() ?: 0,
-                zweiMinuten           = cells[14].toIntOrNull() ?: 0,
-                disqualifikationen    = cells[15].toIntOrNull() ?: 0
-            )
+            val request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("User-Agent", "Mozilla/5.0 (compatible; FeedKrake/1.0)")
+                .header("Accept", "application/json")
+                .GET()
+                .build()
+
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+
+            if (response.statusCode() !in 200..299) {
+                println("❌ [HandballStatistiken] HTTP ${response.statusCode()}")
+                return null
+            }
+
+            response.body()
         } catch (e: Exception) {
-            println("⚠️  [HandballStatistiken] Zeile $rang konnte nicht geparst werden: ${e.message}")
+            println("❌ [HandballStatistiken] HTTP-Fehler: ${e.message}")
             null
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // JSON-Parsing (ohne externe Library)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Parst das JSON-Array unter dem Schlüssel "spieler" und sortiert nach Toren.
+     * Der Rang wird aus der sortierten Reihenfolge berechnet.
+     */
+    private fun parseJson(json: String): List<HandballScorerStats> {
+        val objects = extractJsonObjects(json, "spieler") ?: return emptyList()
+
+        return objects
+            .mapIndexedNotNull { idx, obj -> parsePlayer(idx + 1, obj) }
+            // API liefert bereits sortiert, aber zur Sicherheit nochmals
+            .sortedByDescending { it.tore }
+            .mapIndexed { idx, p -> p.copy(rang = idx + 1) }
+    }
+
+    private fun parsePlayer(defaultRang: Int, json: String): HandballScorerStats? {
+        return try {
+            val siebGew = extractInt(json, "Siebenmeter_geworfen") ?: 0
+            val siebTore = extractInt(json, "Siebenmeter_Tore") ?: 0
+            val pct = if (siebGew > 0) "%.1f%%".format(siebTore * 100.0 / siebGew) else "-"
+
+            HandballScorerStats(
+                rang                = defaultRang,
+                name                = extractString(json, "Name") ?: return null,
+                mannschaft          = extractString(json, "Mannschaft") ?: return null,
+                trNr                = extractInt(json, "Trikot_Nr")?.toString() ?: "-",
+                spiele              = extractIntOrDouble(json, "Spiele") ?: 0,
+                tore                = extractIntOrDouble(json, "Tore") ?: 0,
+                feldtore            = extractIntOrDouble(json, "Feldtore") ?: 0,
+                siebenmeterTore     = extractInt(json, "Siebenmeter_Tore") ?: 0,
+                siebenmeterGeworfen = siebGew,
+                siebenmeterProzent  = pct,
+                letztesSpiel        = extractString(json, "toreLS") ?: "-",
+                toreProSpiel        = extractDouble(json, "Durchschnitt") ?: 0.0,
+                feldtoreProSpiel    = extractDouble(json, "FeldtoreProSpiel") ?: 0.0,
+                verwarnungen        = extractInt(json, "Verwarnungen") ?: 0,
+                zweiMinuten         = extractInt(json, "Zeitstrafen") ?: 0,
+                disqualifikationen  = extractInt(json, "Disqualifikationen") ?: 0
+            )
+        } catch (e: Exception) {
+            println("⚠️  [HandballStatistiken] Spieler konnte nicht geparst werden: ${e.message}")
+            null
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // JSON-Hilfsfunktionen (ähnlich wie HandballScraper im Projekt)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private fun extractString(json: String, key: String): String? {
+        val pattern = Regex(""""$key"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""")
+        return pattern.find(json)?.groupValues?.get(1)
+            ?.replace("\\n", "\n")
+            ?.replace("\\\"", "\"")
+            ?.replace("\\u00f6", "ö")
+            ?.replace("\\u00e4", "ä")
+            ?.replace("\\u00fc", "ü")
+            ?.replace("\\u00d6", "Ö")
+            ?.replace("\\u00c4", "Ä")
+            ?.replace("\\u00dc", "Ü")
+            ?.replace("\\u00df", "ß")
+    }
+
+    private fun extractInt(json: String, key: String): Int? {
+        val pattern = Regex(""""$key"\s*:\s*(\d+)""")
+        return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun extractDouble(json: String, key: String): Double? {
+        val pattern = Regex(""""$key"\s*:\s*([\d.]+)""")
+        return pattern.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
+    }
+
+    /** Liest Integer-Felder die in der API manchmal als Float geliefert werden (z.B. "Tore":58.0). */
+    private fun extractIntOrDouble(json: String, key: String): Int? {
+        val pattern = Regex(""""$key"\s*:\s*([\d.]+)""")
+        return pattern.find(json)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt()
+    }
+
+    /**
+     * Extrahiert alle JSON-Objekte aus einem Array-Feld.
+     * Funktioniert für einfache Fälle ohne verschachtelte Arrays.
+     */
+    private fun extractJsonObjects(json: String, key: String): List<String>? {
+        val keyPattern = """"$key"\s*:\s*\["""
+        val startMatch = Regex(keyPattern).find(json) ?: return null
+        val arrayStart = startMatch.range.last + 1
+
+        val objects = mutableListOf<String>()
+        var depth = 0
+        var objectStart = -1
+
+        for (i in arrayStart until json.length) {
+            when (json[i]) {
+                '{' -> {
+                    if (depth == 0) objectStart = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && objectStart >= 0) {
+                        objects.add(json.substring(objectStart, i + 1))
+                        objectStart = -1
+                    }
+                }
+                ']' -> if (depth == 0) break
+            }
+        }
+
+        return objects.ifEmpty { null }
     }
 }
