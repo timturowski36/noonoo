@@ -9,6 +9,8 @@ import scheduler.CombinedObserver
 import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
 import scheduler.HandballUpcomingModule
+import sources.handballstatistiken.HandballScorerModule
+import sources.pubg.PubgStatsModule
 
 fun main() {
     println("""
@@ -158,13 +160,19 @@ fun runTestMode(c: AppConfigs) {
     println("\n--- TEST MODUS (nur Konsole, kein Discord) ---\n")
 
     val modules = listOf(
+        "PUBG: Stats"                     to PubgStatsModule(c.pubg.players, c.pubg.platform),
         "1. Bundesliga Tabelle"           to BundesligaTableModule.ersteLiga(lieblingsverein = c.bl1.lieblingsverein),
         "2. Bundesliga Tabelle"           to BundesligaTableModule.zweiteLiga(lieblingsverein = c.bl2.lieblingsverein),
         "Nächste Spiele: ${c.spieleSchalke.team}"  to BundesligaNaechsteSpieleModule(c.spieleSchalke.team,  c.spieleSchalke.liga,  c.spieleSchalke.anzahl),
         "Nächste Spiele: ${c.spieleDortmund.team}" to BundesligaNaechsteSpieleModule(c.spieleDortmund.team, c.spieleDortmund.liga, c.spieleDortmund.anzahl),
         "Handball: Ergebnisse"            to HandballResultsModule(c.hsgErgebnisse.teamId,     c.hsgErgebnisse.teamName),
         "Handball: Nächste Spiele"        to HandballUpcomingModule(c.hsgNaechsteSpiele.teamId, c.hsgNaechsteSpiele.teamName),
-        "Handball: Tabelle"               to HandballTableModule(c.hsgTabelle.teamId,           c.hsgTabelle.teamName)
+        "Handball: Tabelle"               to HandballTableModule(c.hsgTabelle.teamId,           c.hsgTabelle.teamName),
+        "Handball: Torjägertabelle NRW"   to HandballScorerModule(
+            url           = "https://handballstatistiken.de/NRW/2526/300268",
+            highlightTeam = "HSG RE/OE",
+            limit         = 15
+        )
     )
 
     modules.forEach { (label, module) ->

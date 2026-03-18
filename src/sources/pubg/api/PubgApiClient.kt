@@ -8,7 +8,6 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.DayOfWeek
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
@@ -262,7 +261,7 @@ class PubgApiClient(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Wochenstatistik (Woche beginnt Montag 6:00 Uhr)
+    // Wochenstatistik (Woche beginnt Montag 00:00 Uhr)
     // ─────────────────────────────────────────────────────────────────────────
 
     fun fetchWeeklyStats(
@@ -275,28 +274,17 @@ class PubgApiClient(
     }
 
     /**
-     * Berechnet den Wochenstart: Letzter Montag um 6:00 Uhr.
+     * Berechnet den Wochenstart: Letzter Montag um 00:00 Uhr (Mitternacht).
+     *
+     * previousOrSame(MONDAY) gibt bei einem Montag den Montag selbst zurück,
+     * sodass ab 00:00 Montag die neue Woche beginnt und kein Match vom Sonntag
+     * fälschlicherweise in die Wochenstatistik einfließt.
      */
     private fun getWeekStartCutoff(): Instant {
         val zone = ZoneId.of("Europe/Berlin")
-        val now = ZonedDateTime.now(zone)
-
-        // Finde den letzten Montag (oder heute wenn Montag)
-        val lastMonday = if (now.dayOfWeek == DayOfWeek.MONDAY && now.hour >= 6) {
-            now.toLocalDate()
-        } else {
-            now.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        }
-
-        // Montag 6:00 Uhr
-        val weekStart = lastMonday.atTime(LocalTime.of(6, 0)).atZone(zone)
-
-        // Falls wir vor Montag 6 Uhr sind, gehe zur Vorwoche
-        return if (now.isBefore(weekStart)) {
-            weekStart.minusWeeks(1).toInstant()
-        } else {
-            weekStart.toInstant()
-        }
+        val today = ZonedDateTime.now(zone).toLocalDate()
+        val lastMonday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        return lastMonday.atStartOfDay(zone).toInstant()
     }
 
     /**
