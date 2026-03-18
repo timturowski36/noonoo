@@ -10,6 +10,7 @@ import scheduler.HandballResultsModule
 import scheduler.HandballTableModule
 import scheduler.HandballUpcomingModule
 import sources.handballstatistiken.HandballScorerModule
+import sources.pubg.PubgStatsModule
 
 fun main() {
     println("""
@@ -159,6 +160,7 @@ fun runTestMode(c: AppConfigs) {
     println("\n--- TEST MODUS (nur Konsole, kein Discord) ---\n")
 
     val modules = listOf(
+        "PUBG: Stats"                     to PubgStatsModule(c.pubg.players, c.pubg.platform),
         "1. Bundesliga Tabelle"           to BundesligaTableModule.ersteLiga(lieblingsverein = c.bl1.lieblingsverein),
         "2. Bundesliga Tabelle"           to BundesligaTableModule.zweiteLiga(lieblingsverein = c.bl2.lieblingsverein),
         "Nächste Spiele: ${c.spieleSchalke.team}"  to BundesligaNaechsteSpieleModule(c.spieleSchalke.team,  c.spieleSchalke.liga,  c.spieleSchalke.anzahl),
