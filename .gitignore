@@ -1,17 +1,20 @@
-# Build output
+# Secrets
+.env
+
+# DuckDB Datenbankdatei
+*.duckdb
+*.duckdb.wal
+
+# Gradle
+.gradle/
+build/
 out/
 
-# IDE
+# IntelliJ
 .idea/
 *.iml
-
-# Credentials (API Keys, Tokens)
-.env
-!.env.example
-
-# Alte Config-Dateien (deprecated)
-src/sources/*/config/*_api_key.txt
-src/outputs/discord/config/*.txt
+*.iws
+*.ipr
 
 # OS
 .DS_Store
@@ -20,8 +23,3 @@ Thumbs.db
 # Logs
 *.log
 logs/
-
-# Temporary files
-*.tmp
-*.bak
-*.swp
