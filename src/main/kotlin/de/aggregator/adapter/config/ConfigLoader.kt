@@ -32,7 +32,9 @@ data class OutputConfig(
     val type: String,
     val channel: String,
     val schedule: String,
-    val format: String
+    val format: String,
+    val params: Map<String, String>? = null,  // limit, leagueName, teamId (einzeln)
+    val teams: List<String>? = null            // Teamnamen → per DB-Lookup aufgelöst
 )
 
 @Serializable

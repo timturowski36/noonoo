@@ -1,6 +1,7 @@
 package de.aggregator.adapter.output.api
 
 import de.aggregator.domain.model.Goal
+import de.aggregator.domain.model.GoalGetter
 import de.aggregator.domain.model.Match
 import de.aggregator.domain.model.Standing
 import de.aggregator.domain.model.Team
@@ -46,6 +47,11 @@ class OpenLigaDbClient(
         } catch (e: Exception) {
             null
         }
+    }
+
+    override suspend fun fetchGoalGetters(league: String, season: Int): List<GoalGetter> {
+        val response: List<ApiGoalGetter> = httpClient.get("$baseUrl/getgoalgetters/$league/$season").body()
+        return response.map { it.toDomain() }
     }
 
     // ── API DTOs ──────────────────────────────────────────────────────────────
@@ -129,6 +135,15 @@ class OpenLigaDbClient(
         @SerialName("PointsTeam1") val pointsTeam1: Int,
         @SerialName("PointsTeam2") val pointsTeam2: Int
     )
+
+    @Serializable
+    private data class ApiGoalGetter(
+        @SerialName("GoalGetterName") val name: String = "",
+        @SerialName("GoalCount") val goals: Int = 0,
+        @SerialName("GoalGetterTeamID") val teamId: Int = 0
+    ) {
+        fun toDomain() = GoalGetter(name = name, teamId = teamId, goals = goals)
+    }
 
     @Serializable
     private data class ApiStanding(

@@ -73,7 +73,7 @@ val appModule = module {
 
     // ── Domain Services ───────────────────────────────────────────────────────
     single<FetchDataUseCase> { IngestionService(get(), get()) }
-    single<QueryDataUseCase> { QueryService(get()) }
+    single<QueryDataUseCase> { QueryService(get(), get()) }
 
     // ── Scheduler ─────────────────────────────────────────────────────────────
     single {

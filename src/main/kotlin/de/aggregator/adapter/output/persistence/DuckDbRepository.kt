@@ -164,6 +164,16 @@ class DuckDbRepository(
         }
     }
 
+    override fun findTeamByName(name: String): Team? {
+        val sql = "SELECT * FROM teams WHERE LOWER(name) = LOWER(?)"
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, name)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.toTeam() else null
+            }
+        }
+    }
+
     override fun findCurrentMatchday(league: String, season: Int): Int {
         val sql = """
             SELECT matchday FROM matches
@@ -175,6 +185,71 @@ class DuckDbRepository(
             stmt.setInt(2, season)
             stmt.executeQuery().use { rs ->
                 if (rs.next()) rs.getInt("matchday") else 1
+            }
+        }
+    }
+
+    override fun findNextMatchday(league: String, season: Int): Int {
+        val sql = """
+            SELECT matchday FROM matches
+            WHERE league = ? AND season = ? AND is_finished = false AND kickoff_at >= NOW()
+            ORDER BY kickoff_at ASC LIMIT 1
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, league)
+            stmt.setInt(2, season)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.getInt("matchday") else findCurrentMatchday(league, season) + 1
+            }
+        }
+    }
+
+    override fun findLastMatchesByTeam(league: String, season: Int, teamId: Int, limit: Int): List<Match> {
+        val sql = """
+            SELECT * FROM matches
+            WHERE league = ? AND season = ?
+              AND (home_team_id = ? OR away_team_id = ?)
+              AND is_finished = true
+            ORDER BY kickoff_at DESC
+            LIMIT ?
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, league)
+            stmt.setInt(2, season)
+            stmt.setInt(3, teamId)
+            stmt.setInt(4, teamId)
+            stmt.setInt(5, limit)
+            stmt.executeQuery().use { rs ->
+                val results = mutableListOf<Match>()
+                while (rs.next()) {
+                    val match = rs.toMatch()
+                    results.add(match.copy(goals = findGoalsForMatch(match.id)))
+                }
+                results
+            }
+        }
+    }
+
+    override fun findNextMatchesByTeam(league: String, season: Int, teamId: Int, limit: Int): List<Match> {
+        val sql = """
+            SELECT * FROM matches
+            WHERE league = ? AND season = ?
+              AND (home_team_id = ? OR away_team_id = ?)
+              AND is_finished = false
+              AND kickoff_at >= NOW()
+            ORDER BY kickoff_at ASC
+            LIMIT ?
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, league)
+            stmt.setInt(2, season)
+            stmt.setInt(3, teamId)
+            stmt.setInt(4, teamId)
+            stmt.setInt(5, limit)
+            stmt.executeQuery().use { rs ->
+                val results = mutableListOf<Match>()
+                while (rs.next()) results.add(rs.toMatch())
+                results
             }
         }
     }
