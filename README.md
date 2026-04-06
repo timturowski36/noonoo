@@ -1,21 +1,58 @@
-# Bundesliga Data Aggregator
+# FeedKrake
 
-Ein modularer, konfigurierbarer Datenaggregator in Kotlin, der automatisch Bundesliga-Daten von OpenLigaDB abruft, in einer lokalen DuckDB-Datenbank speichert und über Discord-Webhooks ausgibt.
+**FeedKrake** ist ein modularer, konfigurierbarer Datenaggregator in Kotlin. Er sammelt automatisch Daten aus verschiedenen Quellen (Sportdaten, News, Wetter, Finanzen u.v.m.), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle – um den Alltag und persönliche Planungsprozesse zu unterstützen.
+
+**Phase 1:** Bundesliga-Daten via OpenLigaDB → Discord
+
+---
+
+## Idee
+
+Viele Informationen, die täglich relevant sind – Spieltermine, Tabellen, Nachrichten, Wetter, Finanzdaten – sind über verschiedene Quellen verstreut. FeedKrake bündelt diese Daten automatisch, bereitet sie auf und liefert sie genau dann, wenn man sie braucht: als tägliche Discord-Zusammenfassung, wöchentlicher Überblick oder direkt nach einem Ereignis.
+
+Langfristig soll FeedKrake als persönlicher Planungsassistent fungieren: strukturierte Daten im richtigen Format, zur richtigen Zeit, auf dem richtigen Kanal.
+
+---
 
 ## Architektur
 
-Das Projekt folgt der **Hexagonalen Architektur (Ports & Adapters)**:
+FeedKrake folgt der **Hexagonalen Architektur (Ports & Adapters)**. Dadurch kann jede Datenquelle und jeder Ausgabekanal unabhängig ausgetauscht oder erweitert werden, ohne die Kernlogik zu berühren.
 
-- `domain/` – reine Kotlin Data Classes und Interfaces (keine Framework-Abhängigkeiten)
-- `adapter/` – implementieren die Ports und verbinden die Domain mit der Außenwelt
-- `adapter/config/` – verdrahtet alles via Koin Dependency Injection
+```
+domain/          – reine Kotlin Data Classes und Interfaces (keine Framework-Abhängigkeiten)
+adapter/         – verbinden die Domain mit der Außenwelt (APIs, Datenbank, Discord, ...)
+adapter/config/  – verdrahtet alles via Koin Dependency Injection
+```
 
 ### Zwei vollständig getrennte Pipelines
 
 ```
 INGESTION:  Scheduler → API-Adapter → Domain Service → DuckDB
-OUTPUT:     Trigger → Repository → Query Service → Discord
+OUTPUT:     Trigger   → Repository  → Query Service  → Ausgabe-Adapter
 ```
+
+Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten. Ausgaben werden unabhängig davon nach eigenem Schedule ausgelöst.
+
+---
+
+## Module (Roadmap)
+
+| Phase | Modul | Quelle | Status |
+|---|---|---|---|
+| 1 | Bundesliga 1 (Tabelle, Ergebnisse) | OpenLigaDB | In Entwicklung |
+| 2 | Bundesliga 2, Champions League | OpenLigaDB | Geplant |
+| 2 | E-Mail-Ausgabe | SMTP | Geplant |
+| 3 | News (Heise, Tagesschau) | RSS | Geplant |
+| 3 | Wetterdaten | Wetter-API | Geplant |
+| 3 | Finanzdaten | Finance-API | Geplant |
+| 4 | Web-Frontend (manuelle Abfragen) | – | Geplant |
+| 4 | KI-Zusammenfassungen | Claude API | Geplant |
+| 5 | Google Sheets Export | Sheets API | Geplant |
+| 5 | Digitaler Bilderrahmen | – | Geplant |
+
+Jedes Modul wird als eigenständiger Adapter implementiert und über `config.yaml` aktiviert oder deaktiviert – ohne Code-Änderungen.
+
+---
 
 ## Tech Stack
 
@@ -35,33 +72,37 @@ OUTPUT:     Trigger → Repository → Query Service → Discord
 | KI (optional) | Anthropic Java SDK | 2.19.0 |
 | Logging | Logback | 1.5.6 |
 
+---
+
 ## Projektstruktur
 
 ```
-bundesliga-aggregator/
+feedkrake/
 ├── .env                          # Secrets (gitignored)
 ├── .env.example                  # Vorlage
 ├── config.yaml                   # Modulkonfiguration
 ├── build.gradle.kts
 ├── settings.gradle.kts
 ├── data/
-│   └── bundesliga.duckdb         # Datenbank (gitignored, portabel)
+│   └── feedkrake.duckdb          # Datenbank (gitignored, portabel)
 └── src/main/kotlin/de/aggregator/
     ├── Application.kt
     ├── domain/
-    │   ├── model/                # Match, Goal, Team, Standing
+    │   ├── model/                # Domain-Modelle (Match, Goal, Team, Standing, ...)
     │   ├── port/
-    │   │   ├── input/            # FetchDataUseCase, QueryDataUseCase
-    │   │   └── output/           # MatchRepository, FootballApiPort, NotificationPort
-    │   └── service/              # IngestionService, QueryService
+    │   │   ├── input/            # Use Cases (FetchDataUseCase, QueryDataUseCase)
+    │   │   └── output/           # Ports (MatchRepository, FootballApiPort, NotificationPort)
+    │   └── service/              # Domain-Services (IngestionService, QueryService)
     └── adapter/
         ├── input/scheduler/      # IngestionScheduler
         ├── output/
-        │   ├── api/              # OpenLigaDbClient
+        │   ├── api/              # OpenLigaDbClient (weitere APIs folgen)
         │   ├── persistence/      # DuckDbRepository
-        │   └── discord/          # DiscordSender
+        │   └── discord/          # DiscordSender (weitere Kanäle folgen)
         └── config/               # AppModule, ConfigLoader, DatabaseConfig
 ```
+
+---
 
 ## Setup
 
@@ -91,21 +132,19 @@ DISCORD_NEWS_WEBHOOK=https://discord.com/api/webhooks/...
 ./gradlew run
 ```
 
-### Danach läuft alles automatisch
+Danach läuft FeedKrake vollautomatisch: Daten werden im Hintergrund aktualisiert, Ausgaben nach konfiguriertem Schedule gesendet.
 
-- Datenbank wird alle 15 Minuten aktualisiert (konfigurierbar in `config.yaml`)
-- Discord-Nachrichten werden nach den konfigurierten Schedules gesendet
-- Keine weitere Interaktion nötig
+---
 
 ## Konfiguration
 
-Module werden in `config.yaml` verwaltet:
+Alle Module werden in `config.yaml` verwaltet. Ein Modul aktivieren oder deaktivieren erfordert keine Code-Änderung:
 
 ```yaml
 modules:
   - id: bundesliga_1
     type: football
-    enabled: true          # auf false setzen zum Deaktivieren
+    enabled: true           # auf false setzen zum Deaktivieren
     source: openligadb
     config:
       league: bl1
@@ -117,6 +156,10 @@ modules:
         channel: sport
         schedule: DAILY_18_00
         format: table_summary
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_00
+        format: matchday_results
 ```
 
 ### Output-Schedules
@@ -125,26 +168,17 @@ modules:
 |---|---|
 | `DAILY_HH_MM` | Täglich zur angegebenen Uhrzeit |
 | `WEEKLY_WEEKDAY_HH_MM` | Wöchentlich am angegebenen Tag |
+| `ON_MATCH_END` | Direkt nach Spielschluss (Phase 2) |
 
-### Output-Formate
+### Output-Formate (Phase 1)
 
 | Format | Beschreibung |
 |---|---|
 | `table_summary` | Tägliche Tabellenübersicht |
 | `matchday_results` | Spieltagsergebnisse mit Torschützen |
 
+---
+
 ## Portabilität
 
-Die `data/bundesliga.duckdb` kann auf einen anderen PC kopiert werden. Nach erneutem `./gradlew run` wird der Betrieb mit dem vorhandenen Datenstand fortgesetzt.
-
-## Datenquelle
-
-[OpenLigaDB](https://api.openligadb.de) – kostenlos, kein API-Key erforderlich.
-
-## Nicht im Scope (Phase 1)
-
-- Web-Frontend oder REST-API
-- Cloud-Deployment
-- Andere Sportarten
-- KI-gestützte Zusammenfassungen
-- Google Sheets Integration
+Die `data/feedkrake.duckdb` kann auf einen anderen PC kopiert werden. Nach erneutem `./gradlew run` wird der Betrieb mit dem vorhandenen Datenstand fortgesetzt – kein erneutes Setup nötig.
