@@ -19,7 +19,8 @@ data class ModuleConfig(
     val source: String,
     val config: Map<String, String>,
     val schedule: ScheduleConfig,
-    val outputs: List<OutputConfig>
+    val outputs: List<OutputConfig>,
+    val players: List<String>? = null
 )
 
 @Serializable

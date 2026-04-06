@@ -6,6 +6,7 @@ import de.noonoo.adapter.output.discord.DiscordSender
 import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
+import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
 import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
@@ -24,6 +25,7 @@ class IngestionScheduler(
     private val fetchUseCase: FetchDataUseCase,
     private val queryUseCase: QueryDataUseCase,
     private val fetchNewsUseCase: FetchNewsUseCase,
+    private val fetchPubgUseCase: FetchPubgDataUseCase,
     private val newsRepository: NewsRepository,
     private val notificationPort: NotificationPort,
     private val webhookChannels: Map<String, String>
@@ -35,6 +37,7 @@ class IngestionScheduler(
             when (module.type) {
                 "football" -> startFootballIngestion(module)
                 "news"     -> startNewsIngestion(module)
+                "pubg"     -> startPubgIngestion(module)
                 else       -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
             }
             startOutputSchedules(module)
@@ -88,6 +91,31 @@ class IngestionScheduler(
         }
     }
 
+    private fun startPubgIngestion(module: ModuleConfig) {
+        val platform = module.config["platform"] ?: run {
+            log.warn { "[${module.id}] Kein 'platform' in module.config – Ingestion übersprungen." }
+            return
+        }
+        val players = module.players ?: run {
+            log.warn { "[${module.id}] Keine 'players' definiert – Ingestion übersprungen." }
+            return
+        }
+        val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
+
+        scope.launch {
+            while (isActive) {
+                try {
+                    log.info { "[${module.id}] Starte PUBG-Abruf ($platform, ${players.size} Spieler)..." }
+                    fetchPubgUseCase.fetchAndStore(players, platform)
+                    log.info { "[${module.id}] PUBG-Abruf abgeschlossen." }
+                } catch (e: Exception) {
+                    log.error(e) { "[${module.id}] Fehler beim PUBG-Abruf: ${e.message}" }
+                }
+                delay(intervalMs)
+            }
+        }
+    }
+
     // ── Output-Schedules ──────────────────────────────────────────────────────
 
     private fun startOutputSchedules(module: ModuleConfig) {
@@ -101,6 +129,7 @@ class IngestionScheduler(
                         when (module.type) {
                             "football" -> sendFootballOutput(module, output)
                             "news"     -> sendNewsOutput(module, output)
+                            "pubg"     -> log.debug { "[${module.id}] PUBG-Output noch nicht implementiert." }
                         }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }

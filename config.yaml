@@ -130,6 +130,19 @@ modules:
         params:
           limit: "5"
 
+  - id: pubg_friends
+    type: pubg
+    enabled: false     # PUBG_API_KEY in .env setzen und auf true ändern
+    source: pubg_api
+    config:
+      platform: steam  # steam | xbox | psn
+    players:
+      - "PlayerName1"
+      - "PlayerName2"
+    schedule:
+      fetchIntervalMinutes: 30
+    outputs: []
+
   - id: bundesliga_2
     type: football
     enabled: false     # Deaktiviert – auf true setzen zum Aktivieren
