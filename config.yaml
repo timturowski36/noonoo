@@ -1,0 +1,40 @@
+modules:
+  - id: bundesliga_1
+    type: football
+    enabled: true
+    source: openligadb
+    config:
+      league: bl1      # Bundesliga 1
+      season: 2024     # Saison 2024/25
+    schedule:
+      fetchIntervalMinutes: 15
+    outputs:
+      - type: discord
+        channel: sport
+        schedule: DAILY_18_00
+        format: table_summary
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_00
+        format: matchday_results
+
+  - id: bundesliga_2
+    type: football
+    enabled: false     # Deaktiviert – einfach auf true setzen
+    source: openligadb
+    config:
+      league: bl2
+      season: 2024
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs:
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_00
+        format: matchday_results
+
+outputs:
+  discord:
+    channels:
+      sport: ${DISCORD_SPORT_WEBHOOK}
+      news: ${DISCORD_NEWS_WEBHOOK}
