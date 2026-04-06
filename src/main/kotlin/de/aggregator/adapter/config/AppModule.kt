@@ -2,14 +2,20 @@ package de.aggregator.adapter.config
 
 import de.aggregator.adapter.input.scheduler.IngestionScheduler
 import de.aggregator.adapter.output.api.OpenLigaDbClient
+import de.aggregator.adapter.output.api.RssNewsClient
 import de.aggregator.adapter.output.discord.DiscordSender
+import de.aggregator.adapter.output.persistence.DuckDbNewsRepository
 import de.aggregator.adapter.output.persistence.DuckDbRepository
 import de.aggregator.domain.port.input.FetchDataUseCase
+import de.aggregator.domain.port.input.FetchNewsUseCase
 import de.aggregator.domain.port.input.QueryDataUseCase
 import de.aggregator.domain.port.output.FootballApiPort
 import de.aggregator.domain.port.output.MatchRepository
+import de.aggregator.domain.port.output.NewsApiPort
+import de.aggregator.domain.port.output.NewsRepository
 import de.aggregator.domain.port.output.NotificationPort
 import de.aggregator.domain.service.IngestionService
+import de.aggregator.domain.service.NewsIngestionService
 import de.aggregator.domain.service.QueryService
 import io.github.cdimascio.dotenv.dotenv
 import io.ktor.client.*
@@ -66,14 +72,21 @@ val appModule = module {
         connection
     }
 
-    // ── Adapter (Output) ──────────────────────────────────────────────────────
+    // ── Adapter: Football ─────────────────────────────────────────────────────
     single<FootballApiPort> { OpenLigaDbClient(get()) }
     single<MatchRepository> { DuckDbRepository(get()) }
+
+    // ── Adapter: News ─────────────────────────────────────────────────────────
+    single<NewsApiPort> { RssNewsClient(get()) }
+    single<NewsRepository> { DuckDbNewsRepository(get()) }
+
+    // ── Adapter: Output ───────────────────────────────────────────────────────
     single<NotificationPort> { DiscordSender(get()) }
 
     // ── Domain Services ───────────────────────────────────────────────────────
     single<FetchDataUseCase> { IngestionService(get(), get()) }
     single<QueryDataUseCase> { QueryService(get(), get()) }
+    single<FetchNewsUseCase> { NewsIngestionService(get(), get()) }
 
     // ── Scheduler ─────────────────────────────────────────────────────────────
     single {
@@ -81,6 +94,8 @@ val appModule = module {
             modules = get<AppConfig>().modules,
             fetchUseCase = get(),
             queryUseCase = get(),
+            fetchNewsUseCase = get(),
+            newsRepository = get(),
             notificationPort = get(),
             webhookChannels = get()
         )

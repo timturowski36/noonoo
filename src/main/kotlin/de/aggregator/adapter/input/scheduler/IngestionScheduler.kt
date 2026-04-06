@@ -3,10 +3,11 @@ package de.aggregator.adapter.input.scheduler
 import de.aggregator.adapter.config.ModuleConfig
 import de.aggregator.adapter.config.OutputConfig
 import de.aggregator.adapter.output.discord.DiscordSender
-import de.aggregator.domain.model.Standing
 import de.aggregator.domain.model.Team
 import de.aggregator.domain.port.input.FetchDataUseCase
+import de.aggregator.domain.port.input.FetchNewsUseCase
 import de.aggregator.domain.port.input.QueryDataUseCase
+import de.aggregator.domain.port.output.NewsRepository
 import de.aggregator.domain.port.output.NotificationPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
@@ -22,6 +23,8 @@ class IngestionScheduler(
     private val modules: List<ModuleConfig>,
     private val fetchUseCase: FetchDataUseCase,
     private val queryUseCase: QueryDataUseCase,
+    private val fetchNewsUseCase: FetchNewsUseCase,
+    private val newsRepository: NewsRepository,
     private val notificationPort: NotificationPort,
     private val webhookChannels: Map<String, String>
 ) {
@@ -29,7 +32,11 @@ class IngestionScheduler(
 
     fun start() {
         modules.filter { it.enabled }.forEach { module ->
-            startIngestion(module)
+            when (module.type) {
+                "football" -> startFootballIngestion(module)
+                "news"     -> startNewsIngestion(module)
+                else       -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
+            }
             startOutputSchedules(module)
         }
     }
@@ -40,7 +47,7 @@ class IngestionScheduler(
 
     // ── Ingestion ─────────────────────────────────────────────────────────────
 
-    private fun startIngestion(module: ModuleConfig) {
+    private fun startFootballIngestion(module: ModuleConfig) {
         val league = module.config["league"] ?: return
         val season = module.config["season"]?.toInt() ?: return
         val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
@@ -48,11 +55,33 @@ class IngestionScheduler(
         scope.launch {
             while (isActive) {
                 try {
-                    log.info { "[${module.id}] Starte Datenabruf ($league/$season)..." }
+                    log.info { "[${module.id}] Starte Fußball-Abruf ($league/$season)..." }
                     fetchUseCase.fetchAndStore(league, season)
-                    log.info { "[${module.id}] Datenabruf abgeschlossen." }
+                    log.info { "[${module.id}] Fußball-Abruf abgeschlossen." }
                 } catch (e: Exception) {
-                    log.error(e) { "[${module.id}] Fehler beim Datenabruf: ${e.message}" }
+                    log.error(e) { "[${module.id}] Fehler beim Fußball-Abruf: ${e.message}" }
+                }
+                delay(intervalMs)
+            }
+        }
+    }
+
+    private fun startNewsIngestion(module: ModuleConfig) {
+        val url = module.config["url"] ?: run {
+            log.warn { "[${module.id}] Kein 'url' in module.config – Ingestion übersprungen." }
+            return
+        }
+        val sourceName = module.config["sourceName"] ?: module.id
+        val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
+
+        scope.launch {
+            while (isActive) {
+                try {
+                    log.info { "[${module.id}] Starte News-Abruf ($sourceName)..." }
+                    fetchNewsUseCase.fetchAndStoreNews(url, sourceName)
+                    log.info { "[${module.id}] News-Abruf abgeschlossen." }
+                } catch (e: Exception) {
+                    log.error(e) { "[${module.id}] Fehler beim News-Abruf: ${e.message}" }
                 }
                 delay(intervalMs)
             }
@@ -62,9 +91,6 @@ class IngestionScheduler(
     // ── Output-Schedules ──────────────────────────────────────────────────────
 
     private fun startOutputSchedules(module: ModuleConfig) {
-        val league = module.config["league"] ?: return
-        val season = module.config["season"]?.toInt() ?: return
-
         module.outputs.forEach { output ->
             scope.launch {
                 while (isActive) {
@@ -72,7 +98,10 @@ class IngestionScheduler(
                     log.info { "[${module.id}] Nächste Ausgabe '${output.format}' in ${delayMs / 60_000}min." }
                     delay(delayMs)
                     try {
-                        sendOutput(module.id, output, league, season)
+                        when (module.type) {
+                            "football" -> sendFootballOutput(module, output)
+                            "news"     -> sendNewsOutput(module, output)
+                        }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }
                     }
@@ -81,28 +110,32 @@ class IngestionScheduler(
         }
     }
 
-    private suspend fun sendOutput(moduleId: String, output: OutputConfig, league: String, season: Int) {
+    // ── Football Output ───────────────────────────────────────────────────────
+
+    private suspend fun sendFootballOutput(module: ModuleConfig, output: OutputConfig) {
+        val league = module.config["league"] ?: return
+        val season = module.config["season"]?.toInt() ?: return
+
         val teamNames = output.teams
         if (!teamNames.isNullOrEmpty() && isTeamSpecificFormat(output.format)) {
-            // Multi-Team: eine Nachricht pro Team
             for (teamName in teamNames) {
                 val team = queryUseCase.getTeamByName(teamName)
                 if (team == null) {
-                    log.warn { "[$moduleId] Team '$teamName' nicht in DB gefunden – übersprungen." }
+                    log.warn { "[${module.id}] Team '$teamName' nicht in DB – übersprungen." }
                     continue
                 }
-                val message = buildMessage(output, league, season, team.id, team.shortName)
+                val message = buildFootballMessage(output, league, season, team.id, team.shortName)
                 if (message != null) {
                     notificationPort.send(output.channel, message)
-                    log.info { "[$moduleId] '${output.format}' für '${team.shortName}' gesendet → #${output.channel}." }
+                    log.info { "[${module.id}] '${output.format}' für '${team.shortName}' → #${output.channel}." }
                     delay(500)
                 }
             }
         } else {
-            val message = buildMessage(output, league, season, null, null)
+            val message = buildFootballMessage(output, league, season, null, null)
             if (message != null) {
                 notificationPort.send(output.channel, message)
-                log.info { "[$moduleId] '${output.format}' gesendet → #${output.channel}." }
+                log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
             }
         }
     }
@@ -111,9 +144,7 @@ class IngestionScheduler(
         "team_last_matches", "team_next_matches", "team_top_scorers", "team_summary"
     )
 
-    // ── Message Builder ───────────────────────────────────────────────────────
-
-    private suspend fun buildMessage(
+    private suspend fun buildFootballMessage(
         output: OutputConfig,
         league: String,
         season: Int,
@@ -123,20 +154,15 @@ class IngestionScheduler(
         val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
         val leagueName = output.params?.get("leagueName") ?: league
         val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
-
-        // teamId: aus Multi-Team-Auflösung, oder aus einzelnem params.teamId
-        val teamId = resolvedTeamId
-            ?: output.params?.get("teamId")?.toIntOrNull()
+        val teamId = resolvedTeamId ?: output.params?.get("teamId")?.toIntOrNull()
 
         return when (output.format) {
-
             "table_summary" -> {
                 val standings = queryUseCase.getStandings(league, season)
                 if (standings.isEmpty()) return null
                 val teams = resolveTeams(standings.map { it.teamId })
                 DiscordSender.formatTableSummary(standings, teams, leagueName, now)
             }
-
             "matchday_results" -> {
                 val matchday = queryUseCase.getCurrentMatchday(league, season)
                 val matches = queryUseCase.getMatchdayResults(league, season, matchday)
@@ -144,40 +170,35 @@ class IngestionScheduler(
                 val teams = resolveTeams(matches.flatMap { listOf(it.homeTeamId, it.awayTeamId) })
                 DiscordSender.formatWeekendSummary(matches, teams, matchday, leagueName, now)
             }
-
             "team_last_matches" -> {
                 val id = teamId ?: return logMissingTeam(output.format)
-                val teamName = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
+                val name = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
                 val matches = queryUseCase.getLastMatchesByTeam(league, season, id, limit)
                 if (matches.isEmpty()) return null
                 val teams = resolveTeams(matches.flatMap { listOf(it.homeTeamId, it.awayTeamId) })
-                DiscordSender.formatTeamLastMatches(matches, teams, teamName, leagueName, now)
+                DiscordSender.formatTeamLastMatches(matches, teams, name, leagueName, now)
             }
-
             "team_next_matches" -> {
                 val id = teamId ?: return logMissingTeam(output.format)
-                val teamName = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
+                val name = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
                 val matches = queryUseCase.getNextMatchesByTeam(league, season, id, limit)
                 if (matches.isEmpty()) return null
                 val teams = resolveTeams(matches.flatMap { listOf(it.homeTeamId, it.awayTeamId) })
-                DiscordSender.formatTeamNextMatches(matches, teams, teamName, leagueName, now)
+                DiscordSender.formatTeamNextMatches(matches, teams, name, leagueName, now)
             }
-
             "team_top_scorers" -> {
                 val id = teamId ?: return logMissingTeam(output.format)
-                val teamName = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
+                val name = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
                 val goalGetters = queryUseCase.getGoalGetters(league, season)
                 val teams = resolveTeams(goalGetters.map { it.teamId })
-                DiscordSender.formatTeamTopScorers(goalGetters, teams, id, teamName, leagueName, now)
+                DiscordSender.formatTeamTopScorers(goalGetters, teams, id, name, leagueName, now)
             }
-
             "league_top_scorers" -> {
                 val goalGetters = queryUseCase.getGoalGetters(league, season)
                 if (goalGetters.isEmpty()) return null
                 val teams = resolveTeams(goalGetters.map { it.teamId })
                 DiscordSender.formatLeagueTopScorers(goalGetters, teams, leagueName, now, limit)
             }
-
             "next_matchday" -> {
                 val matchday = queryUseCase.getNextMatchday(league, season)
                 val matches = queryUseCase.getMatchday(league, season, matchday)
@@ -185,23 +206,16 @@ class IngestionScheduler(
                 val teams = resolveTeams(matches.flatMap { listOf(it.homeTeamId, it.awayTeamId) })
                 DiscordSender.formatNextMatchday(matches, teams, matchday, leagueName, now)
             }
-
             "team_summary" -> {
                 val id = teamId ?: return logMissingTeam(output.format)
-                val teamName = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
+                val name = resolvedTeamName ?: queryUseCase.getTeam(id)?.shortName ?: "?"
                 val standings = queryUseCase.getStandings(league, season)
                 val standing = standings.firstOrNull { it.teamId == id }
                 val lastMatches = queryUseCase.getLastMatchesByTeam(league, season, id, 5)
                 val nextMatches = queryUseCase.getNextMatchesByTeam(league, season, id, 1)
-                val allTeamIds = (lastMatches + nextMatches)
-                    .flatMap { listOf(it.homeTeamId, it.awayTeamId) }
-                val teams = resolveTeams(allTeamIds)
-                DiscordSender.formatTeamSummary(
-                    standing, lastMatches, nextMatches.firstOrNull(),
-                    teams, teamName, leagueName, now
-                )
+                val teams = resolveTeams((lastMatches + nextMatches).flatMap { listOf(it.homeTeamId, it.awayTeamId) })
+                DiscordSender.formatTeamSummary(standing, lastMatches, nextMatches.firstOrNull(), teams, name, leagueName, now)
             }
-
             "weekend_summary" -> {
                 val matchday = queryUseCase.getCurrentMatchday(league, season)
                 val matches = queryUseCase.getMatchdayResults(league, season, matchday)
@@ -209,23 +223,60 @@ class IngestionScheduler(
                 val teams = resolveTeams(matches.flatMap { listOf(it.homeTeamId, it.awayTeamId) })
                 DiscordSender.formatWeekendSummary(matches, teams, matchday, leagueName, now)
             }
-
             "matchday_preview" -> {
                 val matchday = queryUseCase.getNextMatchday(league, season)
                 val matches = queryUseCase.getMatchday(league, season, matchday)
                 if (matches.isEmpty()) return null
-                val standings = queryUseCase.getStandings(league, season)
-                val standingsMap = standings.associateBy { it.teamId }
+                val standingsMap = queryUseCase.getStandings(league, season).associateBy { it.teamId }
                 val teams = resolveTeams(matches.flatMap { listOf(it.homeTeamId, it.awayTeamId) })
                 DiscordSender.formatMatchdayPreview(matches, teams, standingsMap, matchday, leagueName, now)
             }
-
             else -> {
-                log.warn { "Unbekanntes Ausgabeformat: ${output.format}" }
+                log.warn { "Unbekanntes Fußball-Format: ${output.format}" }
                 null
             }
         }
     }
+
+    // ── News Output ───────────────────────────────────────────────────────────
+
+    private suspend fun sendNewsOutput(module: ModuleConfig, output: OutputConfig) {
+        val sourceName = module.config["sourceName"] ?: module.id
+        val message = buildNewsMessage(output, sourceName)
+        if (message != null) {
+            notificationPort.send(output.channel, message)
+            log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
+        }
+    }
+
+    private fun buildNewsMessage(output: OutputConfig, sourceName: String): String? {
+        val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+        val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
+        val keywords = output.params?.get("keywords")
+            ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+        val articles = if (keywords.isEmpty()) {
+            newsRepository.findLatestArticles(sourceName, limit)
+        } else {
+            newsRepository.findArticlesByKeywords(sourceName, keywords, limit)
+        }
+
+        if (articles.isEmpty()) {
+            log.info { "Keine News für '$sourceName' (keywords=$keywords)." }
+            return null
+        }
+
+        return when (output.format) {
+            "news_compact" -> DiscordSender.formatNewsCompact(articles, sourceName, now)
+            else -> {
+                log.warn { "Unbekanntes News-Format: ${output.format}" }
+                null
+            }
+        }
+    }
+
+    // ── Hilfsmethoden ─────────────────────────────────────────────────────────
 
     private fun resolveTeams(ids: List<Int>): Map<Int, Team> =
         ids.distinct().mapNotNull { queryUseCase.getTeam(it) }.associateBy { it.id }

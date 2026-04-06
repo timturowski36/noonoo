@@ -95,6 +95,41 @@ modules:
         params:
           leagueName: "1. Bundesliga"
 
+  - id: heise_tech
+    type: news
+    enabled: true
+    source: rss
+    config:
+      url: "https://www.heise.de/rss/heise-atom.xml"
+      sourceName: "Heise Online"
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs:
+      - type: discord
+        channel: news
+        schedule: DAILY_08_00
+        format: news_compact
+        params:
+          limit: "5"
+          keywords: "KI,GPU,Linux,Windows,Sicherheit"
+
+  - id: tagesschau
+    type: news
+    enabled: true
+    source: rss
+    config:
+      url: "https://www.tagesschau.de/xml/rss2/"
+      sourceName: "Tagesschau"
+    schedule:
+      fetchIntervalMinutes: 30
+    outputs:
+      - type: discord
+        channel: news
+        schedule: DAILY_07_00
+        format: news_compact
+        params:
+          limit: "5"
+
   - id: bundesliga_2
     type: football
     enabled: false     # Deaktiviert – auf true setzen zum Aktivieren

@@ -3,6 +3,7 @@ package de.aggregator.adapter.output.discord
 import club.minnced.discord.webhook.WebhookClient
 import de.aggregator.domain.model.GoalGetter
 import de.aggregator.domain.model.Match
+import de.aggregator.domain.model.NewsArticle
 import de.aggregator.domain.model.Standing
 import de.aggregator.domain.model.Team
 import de.aggregator.domain.port.output.NotificationPort
@@ -258,6 +259,26 @@ class DiscordSender(
                 appendLine("$kickoff  $home  $away")
             }
             appendLine("```")
+        }
+
+        // ── 10. News kompakt ──────────────────────────────────────────────────
+        // "dd.MM. HH:mm  " = 14 Zeichen Prefix → 24 Zeichen Titel = 38 gesamt
+        fun formatNewsCompact(
+            articles: List<NewsArticle>,
+            sourceName: String,
+            date: String
+        ): String = buildString {
+            appendLine("📰 **$sourceName** | Stand: $date")
+            appendLine("```")
+            articles.forEach { a ->
+                val dateStr = a.publishedAt?.format(DateTimeFormatter.ofPattern("dd.MM. HH:mm")) ?: "??:??. ??:??"
+                val title = a.title.take(24)
+                appendLine("$dateStr  $title")
+            }
+            appendLine("```")
+            articles.forEach { a ->
+                appendLine("↳ ${a.url}")
+            }
         }
     }
 }
