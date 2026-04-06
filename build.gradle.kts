@@ -4,7 +4,7 @@ plugins {
     application
 }
 
-group = "de.aggregator"
+group = "de.feedkrake"
 version = "1.0.0"
 
 kotlin {
@@ -12,7 +12,7 @@ kotlin {
 }
 
 application {
-    mainClass.set("de.aggregator.ApplicationKt")
+    mainClass.set("de.feedkrake.ApplicationKt")
 }
 
 repositories {
@@ -65,7 +65,7 @@ dependencies {
 
 tasks.jar {
     manifest {
-        attributes["Main-Class"] = "de.aggregator.ApplicationKt"
+        attributes["Main-Class"] = "de.feedkrake.ApplicationKt"
     }
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE

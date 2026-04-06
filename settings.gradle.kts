@@ -1,1 +1,1 @@
-rootProject.name = "bundesliga-aggregator"
+rootProject.name = "feedkrake"
