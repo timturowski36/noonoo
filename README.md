@@ -37,18 +37,18 @@ Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten. Ausgaben werd
 
 ## Module (Roadmap)
 
-| Phase | Modul | Quelle | Status |
+| Phase | Fokus | Details | Status |
 |---|---|---|---|
-| 1 | Bundesliga 1 (Tabelle, Ergebnisse) | OpenLigaDB | In Entwicklung |
-| 2 | Bundesliga 2, Champions League | OpenLigaDB | Geplant |
-| 2 | E-Mail-Ausgabe | SMTP | Geplant |
-| 3 | News (Heise, Tagesschau) | RSS | Geplant |
-| 3 | Wetterdaten | Wetter-API | Geplant |
-| 3 | Finanzdaten | Finance-API | Geplant |
-| 4 | Web-Frontend (manuelle Abfragen) | – | Geplant |
-| 4 | KI-Zusammenfassungen | Claude API | Geplant |
-| 5 | Google Sheets Export | Sheets API | Geplant |
-| 5 | Digitaler Bilderrahmen | – | Geplant |
+| 1 | Bundesliga – Grundgerüst | Projektstruktur, Domain Models, OpenLigaDB-Client, DuckDB, Discord-Output | Abgeschlossen |
+| 2 | Bundesliga – Ausgaben ausbauen | Weitere Discord-Formate und Output-Schedules für das bestehende Bundesliga-Modul | In Entwicklung |
+| 3 | News-Module | RSS-Feeds (Heise, Tagesschau o.ä.) → Discord | Geplant |
+| 4 | PUBG-Daten | Spielerstatistiken via PUBG API → Discord | Geplant |
+| 5 | Erster Scraper | Web-Scraping einer Datenquelle ohne offizielle API | Geplant |
+| 6 | Google Sheets Export | Daten aus DuckDB → Google Sheets | Geplant |
+| 7 | Wetter- & Finanzdaten | Wetter-API, Finance-API → Discord | Geplant |
+| 8 | KI-Zusammenfassungen | Claude API für aufbereitete Textzusammenfassungen | Geplant |
+| 9 | Web-Frontend | Einfaches Frontend für manuelle Abfragen | Geplant |
+| 10 | Digitaler Bilderrahmen | Visualisierung auf dediziertem Display | Geplant |
 
 Jedes Modul wird als eigenständiger Adapter implementiert und über `config.yaml` aktiviert oder deaktiviert – ohne Code-Änderungen.
 
