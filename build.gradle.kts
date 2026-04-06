@@ -4,7 +4,7 @@ plugins {
     application
 }
 
-group = "de.feedkrake"
+group = "de.noonoo"
 version = "1.0.0"
 
 kotlin {
@@ -12,7 +12,7 @@ kotlin {
 }
 
 application {
-    mainClass.set("de.feedkrake.ApplicationKt")
+    mainClass.set("de.noonoo.ApplicationKt")
 }
 
 repositories {
