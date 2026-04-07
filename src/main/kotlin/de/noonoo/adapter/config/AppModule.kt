@@ -1,25 +1,31 @@
 package de.noonoo.adapter.config
 
 import de.noonoo.adapter.input.scheduler.IngestionScheduler
+import de.noonoo.adapter.output.api.HandballApiClient
 import de.noonoo.adapter.output.api.OpenLigaDbClient
 import de.noonoo.adapter.output.api.PubgApiClient
 import de.noonoo.adapter.output.api.RssNewsClient
 import de.noonoo.adapter.output.discord.DiscordSender
+import de.noonoo.adapter.output.persistence.DuckDbHandballRepository
 import de.noonoo.adapter.output.persistence.DuckDbNewsRepository
 import de.noonoo.adapter.output.persistence.DuckDbPubgRepository
 import de.noonoo.adapter.output.persistence.DuckDbRepository
 import de.noonoo.domain.port.input.FetchDataUseCase
+import de.noonoo.domain.port.input.FetchHandballDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
 import de.noonoo.domain.port.input.QueryPubgDataUseCase
 import de.noonoo.domain.port.output.FootballApiPort
+import de.noonoo.domain.port.output.HandballApiPort
+import de.noonoo.domain.port.output.HandballRepository
 import de.noonoo.domain.port.output.MatchRepository
 import de.noonoo.domain.port.output.NewsApiPort
 import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
 import de.noonoo.domain.port.output.PubgApiPort
 import de.noonoo.domain.port.output.PubgRepository
+import de.noonoo.domain.service.HandballIngestionService
 import de.noonoo.domain.service.IngestionService
 import de.noonoo.domain.service.NewsIngestionService
 import de.noonoo.domain.service.PubgIngestionService
@@ -96,6 +102,11 @@ val appModule = module {
     }
     single<PubgRepository> { DuckDbPubgRepository(get()) }
 
+    // ── Adapter: Handball ─────────────────────────────────────────────────────
+    single<HandballApiPort> { HandballApiClient(get()) }
+    single<HandballRepository> { DuckDbHandballRepository(get()) }
+    single<FetchHandballDataUseCase> { HandballIngestionService(get(), get()) }
+
     // ── Adapter: Output ───────────────────────────────────────────────────────
     single<NotificationPort> { DiscordSender(get()) }
 
@@ -115,6 +126,7 @@ val appModule = module {
             fetchNewsUseCase = get(),
             fetchPubgUseCase = get(),
             queryPubgUseCase = get(),
+            fetchHandballUseCase = get(),
             newsRepository = get(),
             notificationPort = get(),
             webhookChannels = get()
