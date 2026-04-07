@@ -1,16 +1,23 @@
 package de.noonoo.adapter.output.persistence
 
+import de.noonoo.domain.model.PubgMapStat
 import de.noonoo.domain.model.PubgMatch
 import de.noonoo.domain.model.PubgMatchParticipant
+import de.noonoo.domain.model.PubgPeriodStats
+import de.noonoo.domain.model.PubgPersonalRecords
 import de.noonoo.domain.model.PubgPlayer
 import de.noonoo.domain.model.PubgSeasonStats
 import de.noonoo.domain.port.output.PubgRepository
 import java.sql.Connection
+import java.sql.ResultSet
 import java.sql.Timestamp
+import java.time.LocalDateTime
 
 class DuckDbPubgRepository(
     private val connection: Connection
 ) : PubgRepository {
+
+    // ── Ingestion ─────────────────────────────────────────────────────────────
 
     override fun savePlayers(players: List<PubgPlayer>) {
         val sql = """
@@ -148,4 +155,288 @@ class DuckDbPubgRepository(
             }
         }
     }
+
+    // ── Query ─────────────────────────────────────────────────────────────────
+
+    override fun findPlayerByName(name: String): PubgPlayer? {
+        val sql = "SELECT * FROM pubg_players WHERE LOWER(name) = LOWER(?)"
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, name)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.toPlayer() else null
+            }
+        }
+    }
+
+    override fun findPeriodStats(
+        accountId: String,
+        from: LocalDateTime,
+        to: LocalDateTime
+    ): PubgPeriodStats {
+        val sql = """
+            SELECT
+                COUNT(*)                          AS matches,
+                SUM(CASE WHEN p.win_place = 1 THEN 1 ELSE 0 END) AS wins,
+                COALESCE(SUM(p.kills), 0)         AS kills,
+                COALESCE(SUM(p.assists), 0)       AS assists,
+                COALESCE(SUM(p.dbnos), 0)         AS dbnos,
+                COALESCE(SUM(p.damage_dealt), 0)  AS total_damage,
+                COALESCE(SUM(p.headshot_kills), 0) AS headshot_kills,
+                COALESCE(SUM(p.revives), 0)       AS revives,
+                COALESCE(MAX(p.longest_kill), 0)  AS longest_kill
+            FROM pubg_match_participants p
+            JOIN pubg_matches m ON p.match_id = m.match_id
+            WHERE p.account_id = ?
+              AND m.created_at >= ?
+              AND m.created_at < ?
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.setTimestamp(2, Timestamp.valueOf(from))
+            stmt.setTimestamp(3, Timestamp.valueOf(to))
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) {
+                    PubgPeriodStats(
+                        matches = rs.getInt("matches"),
+                        wins = rs.getInt("wins"),
+                        kills = rs.getInt("kills"),
+                        assists = rs.getInt("assists"),
+                        dbnos = rs.getInt("dbnos"),
+                        totalDamage = rs.getDouble("total_damage"),
+                        headshotKills = rs.getInt("headshot_kills"),
+                        revives = rs.getInt("revives"),
+                        longestKill = rs.getDouble("longest_kill")
+                    )
+                } else {
+                    PubgPeriodStats(0, 0, 0, 0, 0, 0.0, 0, 0, 0.0)
+                }
+            }
+        }
+    }
+
+    override fun findPersonalRecords(accountId: String): PubgPersonalRecords {
+        val killsSql = """
+            SELECT p.kills, m.map_name, m.created_at
+            FROM pubg_match_participants p
+            JOIN pubg_matches m ON p.match_id = m.match_id
+            WHERE p.account_id = ?
+            ORDER BY p.kills DESC LIMIT 1
+        """.trimIndent()
+        val damageSql = """
+            SELECT p.damage_dealt, m.map_name, m.created_at
+            FROM pubg_match_participants p
+            JOIN pubg_matches m ON p.match_id = m.match_id
+            WHERE p.account_id = ?
+            ORDER BY p.damage_dealt DESC LIMIT 1
+        """.trimIndent()
+        val longestSql = """
+            SELECT p.longest_kill, m.created_at
+            FROM pubg_match_participants p
+            JOIN pubg_matches m ON p.match_id = m.match_id
+            WHERE p.account_id = ?
+            ORDER BY p.longest_kill DESC LIMIT 1
+        """.trimIndent()
+        val winsSql = """
+            SELECT COALESCE(SUM(wins), 0) AS total_wins
+            FROM pubg_season_stats
+            WHERE account_id = ? AND season_id = 'lifetime'
+        """.trimIndent()
+
+        var maxKills = 0; var maxKillsMap: String? = null; var maxKillsDate: LocalDateTime? = null
+        var maxDamage = 0.0; var maxDamageMap: String? = null; var maxDamageDate: LocalDateTime? = null
+        var longestKill = 0.0; var longestKillDate: LocalDateTime? = null
+        var lifetimeWins = 0
+
+        connection.prepareStatement(killsSql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) {
+                    maxKills = rs.getInt("kills")
+                    maxKillsMap = rs.getString("map_name")
+                    maxKillsDate = rs.getTimestamp("created_at")?.toLocalDateTime()
+                }
+            }
+        }
+        connection.prepareStatement(damageSql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) {
+                    maxDamage = rs.getDouble("damage_dealt")
+                    maxDamageMap = rs.getString("map_name")
+                    maxDamageDate = rs.getTimestamp("created_at")?.toLocalDateTime()
+                }
+            }
+        }
+        connection.prepareStatement(longestSql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) {
+                    longestKill = rs.getDouble("longest_kill")
+                    longestKillDate = rs.getTimestamp("created_at")?.toLocalDateTime()
+                }
+            }
+        }
+        connection.prepareStatement(winsSql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) lifetimeWins = rs.getInt("total_wins")
+            }
+        }
+
+        return PubgPersonalRecords(
+            maxKills = maxKills, maxKillsMap = maxKillsMap, maxKillsDate = maxKillsDate,
+            maxDamage = maxDamage, maxDamageMap = maxDamageMap, maxDamageDate = maxDamageDate,
+            longestKill = longestKill, longestKillDate = longestKillDate,
+            lifetimeWins = lifetimeWins
+        )
+    }
+
+    override fun findRecentMatches(accountId: String, limit: Int): List<Pair<PubgMatch, PubgMatchParticipant>> {
+        val sql = """
+            SELECT m.match_id, m.map_name, m.game_mode, m.duration, m.created_at,
+                   m.match_type, m.shard_id, m.fetched_at,
+                   p.account_id, p.player_name, p.kills, p.assists, p.dbnos,
+                   p.damage_dealt, p.headshot_kills, p.win_place, p.death_type,
+                   p.time_survived, p.walk_distance, p.ride_distance, p.swim_distance,
+                   p.boosts, p.heals, p.revives, p.weapons_acquired,
+                   p.kill_place, p.kill_streaks, p.longest_kill
+            FROM pubg_matches m
+            JOIN pubg_match_participants p ON m.match_id = p.match_id
+            WHERE p.account_id = ?
+            ORDER BY m.created_at DESC
+            LIMIT ?
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.setInt(2, limit)
+            stmt.executeQuery().use { rs ->
+                val results = mutableListOf<Pair<PubgMatch, PubgMatchParticipant>>()
+                while (rs.next()) results.add(rs.toMatchWithParticipant())
+                results
+            }
+        }
+    }
+
+    override fun findMapStats(accountId: String): List<PubgMapStat> {
+        val sql = """
+            SELECT
+                m.map_name,
+                COUNT(*)                                          AS matches,
+                SUM(CASE WHEN p.win_place = 1 THEN 1 ELSE 0 END) AS wins,
+                COALESCE(SUM(p.kills), 0)                         AS total_kills,
+                COALESCE(SUM(p.damage_dealt), 0)                  AS total_damage
+            FROM pubg_match_participants p
+            JOIN pubg_matches m ON p.match_id = m.match_id
+            WHERE p.account_id = ?
+              AND m.map_name IS NOT NULL
+            GROUP BY m.map_name
+            ORDER BY matches DESC
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.executeQuery().use { rs ->
+                val results = mutableListOf<PubgMapStat>()
+                while (rs.next()) {
+                    results.add(PubgMapStat(
+                        mapName = rs.getString("map_name"),
+                        matches = rs.getInt("matches"),
+                        wins = rs.getInt("wins"),
+                        totalKills = rs.getInt("total_kills"),
+                        totalDamage = rs.getDouble("total_damage")
+                    ))
+                }
+                results
+            }
+        }
+    }
+
+    override fun findLifetimeStatsByMode(accountId: String): List<PubgSeasonStats> {
+        val sql = """
+            SELECT * FROM pubg_season_stats
+            WHERE account_id = ? AND season_id = 'lifetime'
+            ORDER BY rounds_played DESC
+        """.trimIndent()
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, accountId)
+            stmt.executeQuery().use { rs ->
+                val results = mutableListOf<PubgSeasonStats>()
+                while (rs.next()) results.add(rs.toSeasonStats())
+                results
+            }
+        }
+    }
+
+    // ── ResultSet mappers ─────────────────────────────────────────────────────
+
+    private fun ResultSet.toPlayer() = PubgPlayer(
+        accountId = getString("account_id"),
+        name = getString("name"),
+        platform = getString("platform"),
+        clanId = getString("clan_id"),
+        banType = getString("ban_type"),
+        firstSeen = getTimestamp("first_seen").toLocalDateTime(),
+        lastUpdated = getTimestamp("last_updated").toLocalDateTime()
+    )
+
+    private fun ResultSet.toMatchWithParticipant(): Pair<PubgMatch, PubgMatchParticipant> {
+        val match = PubgMatch(
+            matchId = getString("match_id"),
+            mapName = getString("map_name") ?: "",
+            gameMode = getString("game_mode") ?: "",
+            duration = getInt("duration"),
+            createdAt = getTimestamp("created_at").toLocalDateTime(),
+            matchType = getString("match_type") ?: "",
+            shardId = getString("shard_id") ?: "",
+            fetchedAt = getTimestamp("fetched_at").toLocalDateTime()
+        )
+        val participant = PubgMatchParticipant(
+            matchId = getString("match_id"),
+            accountId = getString("account_id"),
+            playerName = getString("player_name") ?: "",
+            kills = getInt("kills"),
+            assists = getInt("assists"),
+            dbnos = getInt("dbnos"),
+            damageDealt = getDouble("damage_dealt"),
+            headshotKills = getInt("headshot_kills"),
+            winPlace = getInt("win_place"),
+            deathType = getString("death_type") ?: "",
+            timeSurvived = getDouble("time_survived"),
+            walkDistance = getDouble("walk_distance"),
+            rideDistance = getDouble("ride_distance"),
+            swimDistance = getDouble("swim_distance"),
+            boosts = getInt("boosts"),
+            heals = getInt("heals"),
+            revives = getInt("revives"),
+            weaponsAcquired = getInt("weapons_acquired"),
+            killPlace = getInt("kill_place"),
+            killStreaks = getInt("kill_streaks"),
+            longestKill = getDouble("longest_kill")
+        )
+        return Pair(match, participant)
+    }
+
+    private fun ResultSet.toSeasonStats() = PubgSeasonStats(
+        accountId = getString("account_id"),
+        platform = getString("platform"),
+        seasonId = getString("season_id"),
+        gameMode = getString("game_mode"),
+        kills = getInt("kills"),
+        assists = getInt("assists"),
+        dbnos = getInt("dbnos"),
+        damageDealt = getDouble("damage_dealt"),
+        wins = getInt("wins"),
+        top10s = getInt("top10s"),
+        roundsPlayed = getInt("rounds_played"),
+        losses = getInt("losses"),
+        headshotKills = getInt("headshot_kills"),
+        longestKill = getDouble("longest_kill"),
+        roundMostKills = getInt("round_most_kills"),
+        walkDistance = getDouble("walk_distance"),
+        rideDistance = getDouble("ride_distance"),
+        boosts = getInt("boosts"),
+        heals = getInt("heals"),
+        revives = getInt("revives"),
+        teamKills = getInt("team_kills"),
+        fetchedAt = getTimestamp("fetched_at").toLocalDateTime()
+    )
 }

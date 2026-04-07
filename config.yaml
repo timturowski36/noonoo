@@ -132,7 +132,7 @@ modules:
 
   - id: pubg_friends
     type: pubg
-    enabled: false     # PUBG_API_KEY in .env setzen und auf true ändern
+    enabled: false     # PUBG_API_KEY in .env setzen, Spielernamen eintragen und auf true ändern
     source: pubg_api
     config:
       platform: steam  # steam | xbox | psn
@@ -141,7 +141,56 @@ modules:
       - "PlayerName2"
     schedule:
       fetchIntervalMinutes: 30
-    outputs: []
+    outputs:
+      # Tagesstatistik – täglich um 09:00
+      - type: discord
+        channel: gaming
+        schedule: DAILY_09_00
+        format: pubg_daily_stats
+
+      # Wochenstatistik – montags um 09:00
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_09_00
+        format: pubg_weekly_stats
+
+      # Wochenranking – montags um 09:15
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_09_15
+        format: pubg_weekly_ranking
+
+      # Wochenvergleich – montags um 09:30
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_09_30
+        format: pubg_weekly_progress
+
+      # Persönliche Rekorde – montags um 10:00
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_10_00
+        format: pubg_records
+
+      # Letzte Matches – montags um 10:15
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_10_15
+        format: pubg_recent_matches
+        params:
+          limit: "5"
+
+      # Map-Statistiken – montags um 10:30
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_10_30
+        format: pubg_map_stats
+
+      # Modus-Vergleich – montags um 10:45
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_10_45
+        format: pubg_mode_compare
 
   - id: bundesliga_2
     type: football
@@ -165,3 +214,4 @@ outputs:
     channels:
       sport: ${DISCORD_SPORT_WEBHOOK}
       news: ${DISCORD_NEWS_WEBHOOK}
+      gaming: ${DISCORD_GAMING_WEBHOOK}

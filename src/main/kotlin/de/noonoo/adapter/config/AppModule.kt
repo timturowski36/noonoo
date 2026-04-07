@@ -12,6 +12,7 @@ import de.noonoo.domain.port.input.FetchDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
+import de.noonoo.domain.port.input.QueryPubgDataUseCase
 import de.noonoo.domain.port.output.FootballApiPort
 import de.noonoo.domain.port.output.MatchRepository
 import de.noonoo.domain.port.output.NewsApiPort
@@ -22,6 +23,7 @@ import de.noonoo.domain.port.output.PubgRepository
 import de.noonoo.domain.service.IngestionService
 import de.noonoo.domain.service.NewsIngestionService
 import de.noonoo.domain.service.PubgIngestionService
+import de.noonoo.domain.service.PubgQueryService
 import de.noonoo.domain.service.QueryService
 import io.github.cdimascio.dotenv.dotenv
 import io.ktor.client.*
@@ -102,6 +104,7 @@ val appModule = module {
     single<QueryDataUseCase> { QueryService(get(), get()) }
     single<FetchNewsUseCase> { NewsIngestionService(get(), get()) }
     single<FetchPubgDataUseCase> { PubgIngestionService(get(), get()) }
+    single<QueryPubgDataUseCase> { PubgQueryService(get()) }
 
     // ── Scheduler ─────────────────────────────────────────────────────────────
     single {
@@ -111,6 +114,7 @@ val appModule = module {
             queryUseCase = get(),
             fetchNewsUseCase = get(),
             fetchPubgUseCase = get(),
+            queryPubgUseCase = get(),
             newsRepository = get(),
             notificationPort = get(),
             webhookChannels = get()
