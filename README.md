@@ -2,7 +2,7 @@
 
 **NooNoo** ist ein modularer Datenaggregator in Kotlin – benannt nach dem fleißigen kleinen Roboter aus den Teletubbys, der unermüdlich alles aufsammelt und aufräumt.
 
-NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
+NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, Handball, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
 
 Die Ingestion und die Ausgabe laufen vollständig entkoppelt: Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten; Ausgaben folgen einem eigenen, konfigurierbaren Schedule.
 
@@ -39,7 +39,7 @@ Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten. Ausgaben werd
 | 2 | Bundesliga – Ausgaben ausbauen | Weitere Discord-Formate und Output-Schedules für das bestehende Bundesliga-Modul | Abgeschlossen |
 | 3 | News-Module | RSS-Feeds (Heise, Tagesschau) → Discord mit Keyword-Filterung | Abgeschlossen |
 | 4 | PUBG-Daten | Spieler- & Match-Statistiken via PUBG API → DuckDB → Discord | Abgeschlossen |
-| 5 | Erster Scraper | Web-Scraping einer Datenquelle ohne offizielle API | Geplant |
+| 5 | Handball-Modul | H4A-API + handball.net-Scraping → DuckDB → 7 Discord-Ausgabeformate (Tabelle, Spielplan, Ticker, ...) | Abgeschlossen |
 | 6 | Google Sheets Export | Daten aus DuckDB → Google Sheets | Geplant |
 | 7 | Wetter- & Finanzdaten | Wetter-API, Finance-API → Discord | Geplant |
 | 8 | KI-Zusammenfassungen | Claude API für aufbereitete Textzusammenfassungen | Geplant |
@@ -87,23 +87,27 @@ noonoo/
     │   ├── model/                # Match, Goal, Team, Standing, NewsArticle,
     │   │                         # PubgPlayer, PubgMatch, PubgMatchParticipant,
     │   │                         # PubgSeasonStats, PubgPeriodStats, PubgMapStat,
-    │   │                         # PubgPersonalRecords, ...
+    │   │                         # PubgPersonalRecords,
+    │   │                         # HandballMatch, HandballStanding, HandballTickerEvent
     │   ├── port/
     │   │   ├── input/            # FetchDataUseCase, QueryDataUseCase,
     │   │   │                     # FetchNewsUseCase, FetchPubgDataUseCase,
-    │   │   │                     # QueryPubgDataUseCase
+    │   │   │                     # QueryPubgDataUseCase, FetchHandballDataUseCase
     │   │   └── output/           # MatchRepository, FootballApiPort,
-    │   │                         # NewsRepository, PubgApiPort, PubgRepository
+    │   │                         # NewsRepository, PubgApiPort, PubgRepository,
+    │   │                         # HandballRepository, HandballApiPort
     │   └── service/              # IngestionService, QueryService,
     │                             # NewsIngestionService, PubgIngestionService,
-    │                             # PubgQueryService
+    │                             # PubgQueryService, HandballIngestionService
     └── adapter/
         ├── input/scheduler/      # IngestionScheduler
         ├── output/
-        │   ├── api/              # OpenLigaDbClient, RssNewsClient, PubgApiClient
+        │   ├── api/              # OpenLigaDbClient, RssNewsClient, PubgApiClient,
+        │   │                     # HandballApiClient (H4A-API + handball.net-Scraping)
         │   ├── persistence/      # DuckDbRepository, DuckDbNewsRepository,
-        │   │                     # DuckDbPubgRepository
-        │   └── discord/          # DiscordSender, PubgDiscordFormatter
+        │   │                     # DuckDbPubgRepository, DuckDbHandballRepository
+        │   └── discord/          # DiscordSender, PubgDiscordFormatter,
+        │                         # HandballDiscordFormatter
         └── config/               # AppModule, ConfigLoader, DatabaseConfig
 ```
 
@@ -235,6 +239,67 @@ modules:
 | `pubg_records` | pubg | Persönliche Rekorde (Kills, Schaden, weitester Kill, Lifetime Wins) |
 | `pubg_recent_matches` | pubg | Letzte N Matches als Tabelle (Datum, Map, Platzierung, Kills, Schaden) |
 | `pubg_map_stats` | pubg | Statistiken nach Map (Matches, K/D, Ø Schaden, Siege) |
+| `handball_table` | handball | Ligatabelle mit Platz, Spielen, Toren und Punkten |
+| `handball_last_matches` | handball | Letzte Spiele eines Teams (Datum, Ergebnis, Heim/Gast) |
+| `handball_next_matches` | handball | Nächste Spiele eines Teams (Datum, Uhrzeit, Paarung) |
+| `handball_weekend_results` | handball | Alle Liga-Ergebnisse vom letzten Wochenende |
+| `handball_match_report` | handball | Spielbericht mit vollständigem Ticker (Torschützen, Trikotnummern, Zeitstrafen) |
+| `handball_form_table` | handball | Formtabelle: letzte 5 Spiele pro Team, sortiert nach Formpunkten |
+| `handball_next_matchday` | handball | Alle Spiele des nächsten Spieltags der Liga |
+
+---
+
+## Handball-Modul
+
+Das Handball-Modul bezieht Daten aus zwei Quellen:
+
+- **Handball4All-API** (`handball4all.de`) – Spielpläne, Ergebnisse und Ligatabellen für alle Ligen des DHB-Systems
+- **handball.net** – Live-Ticker-Events (Tore, Zeitstrafen, Halbzeit-/Endstand) via HTML-Scraping mit Jsoup
+
+### Besonderheiten
+
+- **Mehrere Teams**: Jedes Team wird als eigenes Modul in `config.yaml` eingetragen — beliebig viele Teams möglich, jedes mit eigenem Channel und Schedule.
+- **Gegner-Spiele**: Zusätzlich zum eigenen Spielplan wird der vollständige Liga-Spielplan abgerufen, sodass auch Ergebnisse und Begegnungen zwischen anderen Teams der Liga verfügbar sind.
+- **Sonderfall Nichtantreten**: Spiele mit Kampfwertung werden erkannt (`gComment`-Feld), korrekt als beendet markiert und im Ticker übersprungen.
+- **Spielernamen im Ticker**: Die Ticker-Ausgabe zeigt Torschütze und Trikotnummer (`Philipp Potthoefer #34`). Wenn kein Name eingetragen wurde, erscheint `n.n. #24`.
+
+### Konfiguration
+
+```yaml
+- id: handball_mein_team
+  type: handball
+  enabled: true
+  source: handball_api
+  config:
+    teamId: "handball4all.westfalen.1309001"   # Verband + numerische ID aus handball.net-URL
+  schedule:
+    fetchIntervalMinutes: 60
+  outputs:
+    - type: discord
+      channel: sport
+      schedule: WEEKLY_MONDAY_09_00
+      format: handball_table
+      teams:
+        - "HSG RE/OE"                          # Teamname wie in der H4A-API
+      params:
+        leagueName: "Bezirksliga Ruhrgebiet"
+
+    - type: discord
+      channel: sport
+      schedule: WEEKLY_SATURDAY_21_30
+      format: handball_match_report
+      teams:
+        - "HSG RE/OE"
+```
+
+Die `teamId` setzt sich zusammen aus `handball4all.{verband}.{numericId}` — ablesbar aus der handball.net-URL des jeweiligen Teams.
+
+### Voraussetzungen
+
+- Kein API-Key erforderlich (H4A-API ist öffentlich)
+- Teamname in `teams:` muss exakt mit dem Namen in der H4A-API übereinstimmen
+- `DISCORD_SPORT_WEBHOOK` in `.env` eintragen
+- Modul auf `enabled: true` setzen
 
 ---
 
