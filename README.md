@@ -2,7 +2,7 @@
 
 **NooNoo** ist ein modularer Datenaggregator in Kotlin – benannt nach dem fleißigen kleinen Roboter aus den Teletubbys, der unermüdlich alles aufsammelt und aufräumt.
 
-NooNoo saugt automatisch Daten aus verschiedenen Quellen (Phase 1: Bundesliga via OpenLigaDB), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Phase 1: Discord) – genau dann, wenn man sie braucht.
+NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
 
 Die Ingestion und die Ausgabe laufen vollständig entkoppelt: Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten; Ausgaben folgen einem eigenen, konfigurierbaren Schedule.
 
@@ -38,7 +38,7 @@ Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten. Ausgaben werd
 | 1 | Bundesliga – Grundgerüst | Projektstruktur, Domain Models, OpenLigaDB-Client, DuckDB, Discord-Output | Abgeschlossen |
 | 2 | Bundesliga – Ausgaben ausbauen | Weitere Discord-Formate und Output-Schedules für das bestehende Bundesliga-Modul | Abgeschlossen |
 | 3 | News-Module | RSS-Feeds (Heise, Tagesschau) → Discord mit Keyword-Filterung | Abgeschlossen |
-| 4 | PUBG-Daten | Spielerstatistiken via PUBG API → Discord | Geplant |
+| 4 | PUBG-Daten | Spieler- & Match-Statistiken via PUBG API → DuckDB → Discord | Abgeschlossen |
 | 5 | Erster Scraper | Web-Scraping einer Datenquelle ohne offizielle API | Geplant |
 | 6 | Google Sheets Export | Daten aus DuckDB → Google Sheets | Geplant |
 | 7 | Wetter- & Finanzdaten | Wetter-API, Finance-API → Discord | Geplant |
@@ -84,17 +84,26 @@ noonoo/
 └── src/main/kotlin/de/noonoo/
     ├── Application.kt
     ├── domain/
-    │   ├── model/                # Domain-Modelle (Match, Goal, Team, Standing, NewsArticle, ...)
+    │   ├── model/                # Match, Goal, Team, Standing, NewsArticle,
+    │   │                         # PubgPlayer, PubgMatch, PubgMatchParticipant,
+    │   │                         # PubgSeasonStats, PubgPeriodStats, PubgMapStat,
+    │   │                         # PubgPersonalRecords, ...
     │   ├── port/
-    │   │   ├── input/            # Use Cases (FetchDataUseCase, QueryDataUseCase, FetchNewsUseCase)
-    │   │   └── output/           # Ports (MatchRepository, FootballApiPort, NewsRepository, ...)
-    │   └── service/              # Domain-Services (IngestionService, QueryService, NewsIngestionService)
+    │   │   ├── input/            # FetchDataUseCase, QueryDataUseCase,
+    │   │   │                     # FetchNewsUseCase, FetchPubgDataUseCase,
+    │   │   │                     # QueryPubgDataUseCase
+    │   │   └── output/           # MatchRepository, FootballApiPort,
+    │   │                         # NewsRepository, PubgApiPort, PubgRepository
+    │   └── service/              # IngestionService, QueryService,
+    │                             # NewsIngestionService, PubgIngestionService,
+    │                             # PubgQueryService
     └── adapter/
         ├── input/scheduler/      # IngestionScheduler
         ├── output/
-        │   ├── api/              # OpenLigaDbClient, RssNewsClient
-        │   ├── persistence/      # DuckDbRepository, DuckDbNewsRepository
-        │   └── discord/          # DiscordSender
+        │   ├── api/              # OpenLigaDbClient, RssNewsClient, PubgApiClient
+        │   ├── persistence/      # DuckDbRepository, DuckDbNewsRepository,
+        │   │                     # DuckDbPubgRepository
+        │   └── discord/          # DiscordSender, PubgDiscordFormatter
         └── config/               # AppModule, ConfigLoader, DatabaseConfig
 ```
 
@@ -120,6 +129,9 @@ cp .env.example .env
 ```env
 DISCORD_SPORT_WEBHOOK=https://discord.com/api/webhooks/...
 DISCORD_NEWS_WEBHOOK=https://discord.com/api/webhooks/...
+DISCORD_GAMING_WEBHOOK=https://discord.com/api/webhooks/...   # für PUBG-Ausgaben
+
+PUBG_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...         # PUBG Developer Portal
 ```
 
 ### 3. Starten
@@ -172,6 +184,27 @@ modules:
         params:
           limit: "5"
           keywords: "KI,GPU,Linux,Windows,Sicherheit"
+
+  - id: pubg_friends
+    type: pubg
+    enabled: true
+    source: pubg_api
+    config:
+      platform: steam        # steam | xbox | psn
+    players:
+      - "MeinSpielerName"
+      - "FreundName1"
+    schedule:
+      fetchIntervalMinutes: 30
+    outputs:
+      - type: discord
+        channel: gaming
+        schedule: DAILY_09_00
+        format: pubg_daily_stats
+      - type: discord
+        channel: gaming
+        schedule: WEEKLY_MONDAY_09_00
+        format: pubg_weekly_stats
 ```
 
 ### Output-Schedules
@@ -195,6 +228,34 @@ modules:
 | `next_matchday` | football | Nächster Spieltag (Datum + Paarungen) |
 | `matchday_preview` | football | Spieltag-Vorschau mit Anstoßzeiten |
 | `news_compact` | news | Kompakte Nachrichtenübersicht mit Links |
+| `pubg_daily_stats` | pubg | Tagesstatistik (Matches, K/D, Ø Schaden) |
+| `pubg_weekly_stats` | pubg | Wochenstatistik inkl. Headshots, Revives, weitester Kill |
+| `pubg_weekly_ranking` | pubg | Gruppenranking nach K/D für die aktuelle Woche |
+| `pubg_weekly_progress` | pubg | Vergleich diese Woche vs. letzte Woche |
+| `pubg_records` | pubg | Persönliche Rekorde (Kills, Schaden, weitester Kill, Lifetime Wins) |
+| `pubg_recent_matches` | pubg | Letzte N Matches als Tabelle (Datum, Map, Platzierung, Kills, Schaden) |
+| `pubg_map_stats` | pubg | Statistiken nach Map (Matches, K/D, Ø Schaden, Siege) |
+
+---
+
+## PUBG-Modul
+
+Das PUBG-Modul speichert Match- und Spielerdaten dauerhaft in der lokalen DuckDB. Da die PUBG API Matchdaten nach **14 Tagen permanent löscht**, ist die lokale Datenbank essenziell – historische Stats bleiben erhalten, solange NooNoo regelmäßig läuft.
+
+### Funktionsweise
+
+1. Alle konfigurierten Spielernamen werden per API aufgelöst (Account-IDs werden gespeichert).
+2. Neue Matches werden automatisch erkannt und vollständig (alle Teilnehmer) gespeichert.
+3. Lifetime-Stats werden nach jedem Ingestion-Lauf aktualisiert.
+4. Deduplication verhindert, dass Matches mehrfach gespeichert werden, auch wenn mehrere getrackte Spieler im gleichen Match waren.
+
+### Voraussetzungen
+
+- PUBG API Key vom [PUBG Developer Portal](https://developer.pubg.com/)
+- `PUBG_API_KEY` in `.env` eintragen
+- `DISCORD_GAMING_WEBHOOK` in `.env` eintragen
+- Spielernamen in `config.yaml` unter `players:` eintragen
+- Modul auf `enabled: true` setzen
 
 ---
 
