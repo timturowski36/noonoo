@@ -165,6 +165,7 @@ val appModule = module {
             queryPubgUseCase = get(),
             fetchHandballUseCase = get(),
             fetchHandballStatisticsUseCase = get(),
+            queryHandballStatisticsUseCase = get(),
             fetchF1UseCase = get(),
             queryF1UseCase = get(),
             f1Repository = get(),

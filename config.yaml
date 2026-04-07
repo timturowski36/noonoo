@@ -333,7 +333,22 @@ modules:
       season: "2526"
     schedule:
       fetchIntervalMinutes: 60
-    outputs: []
+    outputs:
+      # Komplette Torschützenliste — montags um 09:20
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_20
+        format: handball_scorer_table
+        params:
+          limit: "30"
+
+      # Torschützen eines bestimmten Teams — montags um 09:25
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_25
+        format: handball_scorer_team
+        teams:
+          - "HSG RE/OE"
 
 outputs:
   discord:

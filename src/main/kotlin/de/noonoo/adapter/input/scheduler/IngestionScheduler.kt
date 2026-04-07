@@ -5,6 +5,7 @@ import de.noonoo.adapter.config.OutputConfig
 import de.noonoo.adapter.output.discord.DiscordSender
 import de.noonoo.adapter.output.discord.F1DiscordFormatter
 import de.noonoo.adapter.output.discord.HandballDiscordFormatter
+import de.noonoo.adapter.output.discord.HandballStatisticsDiscordFormatter
 import de.noonoo.adapter.output.discord.PubgDiscordFormatter
 import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
@@ -15,6 +16,7 @@ import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
 import de.noonoo.domain.port.input.QueryF1DataUseCase
+import de.noonoo.domain.port.input.QueryHandballStatisticsUseCase
 import de.noonoo.domain.port.input.QueryPubgDataUseCase
 import de.noonoo.domain.port.output.F1Repository
 import de.noonoo.domain.port.output.HandballRepository
@@ -39,6 +41,7 @@ class IngestionScheduler(
     private val queryPubgUseCase: QueryPubgDataUseCase,
     private val fetchHandballUseCase: FetchHandballDataUseCase,
     private val fetchHandballStatisticsUseCase: FetchHandballStatisticsUseCase,
+    private val queryHandballStatisticsUseCase: QueryHandballStatisticsUseCase,
     private val fetchF1UseCase: FetchF1DataUseCase,
     private val queryF1UseCase: QueryF1DataUseCase,
     private val f1Repository: F1Repository,
@@ -234,7 +237,7 @@ class IngestionScheduler(
                             "news"                -> sendNewsOutput(module, output)
                             "pubg"                -> sendPubgOutput(module, output)
                             "handball"            -> sendHandballOutput(module, output)
-                            "handball_statistics" -> log.info { "[${module.id}] Kein Output für handball_statistics konfiguriert." }
+                            "handball_statistics" -> sendHandballStatisticsOutput(module, output)
                             "formula1"            -> sendF1Output(module, output)
                         }
                     } catch (e: Exception) {
@@ -470,6 +473,44 @@ class IngestionScheduler(
             else -> log.warn { "[${module.id}] Unbekanntes PUBG-Format: ${output.format}" }
         }
         log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
+    }
+
+    // ── Handball Statistics Output ────────────────────────────────────────────
+
+    private suspend fun sendHandballStatisticsOutput(module: ModuleConfig, output: OutputConfig) {
+        val leagueId = module.config["leagueId"] ?: run {
+            log.warn { "[${module.id}] Kein 'leagueId' in module.config – handball_statistics-Ausgabe übersprungen." }
+            return
+        }
+        val now = LocalDateTime.now()
+        val limit = output.params?.get("limit")?.toIntOrNull() ?: 30
+
+        val scorerList = queryHandballStatisticsUseCase.getLatestScorerList(leagueId) ?: run {
+            log.warn { "[${module.id}] Keine Daten für Liga $leagueId in DB – Ausgabe übersprungen." }
+            return
+        }
+
+        val message: String? = when (output.format) {
+            "handball_scorer_table" -> {
+                HandballStatisticsDiscordFormatter.formatScorerTable(scorerList, now, limit)
+            }
+            "handball_scorer_team" -> {
+                val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
+                    log.warn { "[${module.id}] Kein Teamname für handball_scorer_team angegeben." }
+                    return
+                }
+                HandballStatisticsDiscordFormatter.formatScorerTeam(scorerList, teamName, now)
+            }
+            else -> {
+                log.warn { "[${module.id}] Unbekanntes handball_statistics-Format: ${output.format}" }
+                null
+            }
+        }
+
+        if (message != null) {
+            notificationPort.send(output.channel, message)
+            log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
+        }
     }
 
     // ── Handball Output ───────────────────────────────────────────────────────
