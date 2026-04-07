@@ -2,7 +2,7 @@
 
 **NooNoo** ist ein modularer Datenaggregator in Kotlin – benannt nach dem fleißigen kleinen Roboter aus den Teletubbys, der unermüdlich alles aufsammelt und aufräumt.
 
-NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
+NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, Handball, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
 
 Die Ingestion und die Ausgabe laufen vollständig entkoppelt: Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten; Ausgaben folgen einem eigenen, konfigurierbaren Schedule.
 
@@ -39,7 +39,7 @@ Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten. Ausgaben werd
 | 2 | Bundesliga – Ausgaben ausbauen | Weitere Discord-Formate und Output-Schedules für das bestehende Bundesliga-Modul | Abgeschlossen |
 | 3 | News-Module | RSS-Feeds (Heise, Tagesschau) → Discord mit Keyword-Filterung | Abgeschlossen |
 | 4 | PUBG-Daten | Spieler- & Match-Statistiken via PUBG API → DuckDB → Discord | Abgeschlossen |
-| 5 | Erster Scraper | Web-Scraping einer Datenquelle ohne offizielle API | Geplant |
+| 5 | Handball-Modul | H4A-API + handball.net Ticker-Scraping, beliebig viele Teams, Gegner-Spielplan, Nichtantreten-Erkennung | Abgeschlossen |
 | 6 | Google Sheets Export | Daten aus DuckDB → Google Sheets | Geplant |
 | 7 | Wetter- & Finanzdaten | Wetter-API, Finance-API → Discord | Geplant |
 | 8 | KI-Zusammenfassungen | Claude API für aufbereitete Textzusammenfassungen | Geplant |
@@ -87,22 +87,25 @@ noonoo/
     │   ├── model/                # Match, Goal, Team, Standing, NewsArticle,
     │   │                         # PubgPlayer, PubgMatch, PubgMatchParticipant,
     │   │                         # PubgSeasonStats, PubgPeriodStats, PubgMapStat,
-    │   │                         # PubgPersonalRecords, ...
+    │   │                         # PubgPersonalRecords,
+    │   │                         # HandballMatch, HandballStanding, HandballTickerEvent
     │   ├── port/
     │   │   ├── input/            # FetchDataUseCase, QueryDataUseCase,
     │   │   │                     # FetchNewsUseCase, FetchPubgDataUseCase,
-    │   │   │                     # QueryPubgDataUseCase
+    │   │   │                     # QueryPubgDataUseCase, FetchHandballDataUseCase
     │   │   └── output/           # MatchRepository, FootballApiPort,
-    │   │                         # NewsRepository, PubgApiPort, PubgRepository
+    │   │                         # NewsRepository, PubgApiPort, PubgRepository,
+    │   │                         # HandballApiPort, HandballRepository
     │   └── service/              # IngestionService, QueryService,
     │                             # NewsIngestionService, PubgIngestionService,
-    │                             # PubgQueryService
+    │                             # PubgQueryService, HandballIngestionService
     └── adapter/
         ├── input/scheduler/      # IngestionScheduler
         ├── output/
-        │   ├── api/              # OpenLigaDbClient, RssNewsClient, PubgApiClient
+        │   ├── api/              # OpenLigaDbClient, RssNewsClient, PubgApiClient,
+        │   │                     # HandballApiClient
         │   ├── persistence/      # DuckDbRepository, DuckDbNewsRepository,
-        │   │                     # DuckDbPubgRepository
+        │   │                     # DuckDbPubgRepository, DuckDbHandballRepository
         │   └── discord/          # DiscordSender, PubgDiscordFormatter
         └── config/               # AppModule, ConfigLoader, DatabaseConfig
 ```
@@ -205,6 +208,17 @@ modules:
         channel: gaming
         schedule: WEEKLY_MONDAY_09_00
         format: pubg_weekly_stats
+
+  # Handball — mehrere Teams möglich, jedes als eigenes Modul
+  - id: handball_mein_team
+    type: handball
+    enabled: true
+    source: handball_api
+    config:
+      teamId: "handball4all.westfalen.1309001"   # aus handball.net-URL ablesen
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs: []
 ```
 
 ### Output-Schedules
@@ -235,6 +249,43 @@ modules:
 | `pubg_records` | pubg | Persönliche Rekorde (Kills, Schaden, weitester Kill, Lifetime Wins) |
 | `pubg_recent_matches` | pubg | Letzte N Matches als Tabelle (Datum, Map, Platzierung, Kills, Schaden) |
 | `pubg_map_stats` | pubg | Statistiken nach Map (Matches, K/D, Ø Schaden, Siege) |
+
+---
+
+## Handball-Modul
+
+Das Handball-Modul kombiniert zwei Datenquellen:
+
+- **H4A-API** (Handball4All): JSON-API für Spielpläne, Tabellen und Ergebnisse. Liefert den vollständigen **Liga-Spielplan** – nicht nur die eigenen Spiele, sondern automatisch auch alle Spiele der Gegner.
+- **handball.net**: HTML-Scraping für Spiel-Ticker (Tore, Zeitstrafen, Auszeiten etc.).
+
+### Funktionsweise
+
+1. Pro Abruf werden zuerst die eigenen Spiele geladen, dann der komplette Liga-Spielplan.
+2. Beide Listen werden per `INSERT OR REPLACE` dedupliziert in DuckDB gespeichert.
+3. Für gestartete Spiele wird der Ticker von handball.net gescraped.
+4. **Nichtantreten** (Forfeit/Walkover) wird automatisch erkannt: Spiele ohne Tore, aber mit vergebenen Punkten gelten als beendet. Der Ticker-Abruf wird für solche Spiele übersprungen.
+
+### teamId ermitteln
+
+Die `teamId` steht in der handball.net-URL:
+
+```
+https://www.handball.net/vereine/handball4all.westfalen.1309001/
+                              ─────────────────────────────────
+                              ↑ das ist die teamId
+```
+
+Format: `{provider}.{verband}.{numericId}` — z. B. `handball4all.westfalen.1309001`
+
+Verbände für NRW: `westfalen` (HV Westfalen), `niederrhein` (HV Niederrhein)
+
+### Voraussetzungen
+
+- `teamId` in `config.yaml` unter `config.teamId` eintragen
+- Modul auf `enabled: true` setzen
+- Kein API-Key nötig (öffentliche API)
+- Mehrere Teams: einfach weitere Module mit eigener `teamId` anlegen
 
 ---
 
