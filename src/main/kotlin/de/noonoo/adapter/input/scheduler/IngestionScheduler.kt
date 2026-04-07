@@ -6,6 +6,7 @@ import de.noonoo.adapter.output.discord.DiscordSender
 import de.noonoo.adapter.output.discord.PubgDiscordFormatter
 import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
+import de.noonoo.domain.port.input.FetchHandballDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
@@ -29,6 +30,7 @@ class IngestionScheduler(
     private val fetchNewsUseCase: FetchNewsUseCase,
     private val fetchPubgUseCase: FetchPubgDataUseCase,
     private val queryPubgUseCase: QueryPubgDataUseCase,
+    private val fetchHandballUseCase: FetchHandballDataUseCase,
     private val newsRepository: NewsRepository,
     private val notificationPort: NotificationPort,
     private val webhookChannels: Map<String, String>
@@ -41,6 +43,7 @@ class IngestionScheduler(
                 "football" -> startFootballIngestion(module)
                 "news"     -> startNewsIngestion(module)
                 "pubg"     -> startPubgIngestion(module)
+                "handball" -> startHandballIngestion(module)
                 else       -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
             }
             startOutputSchedules(module)
@@ -119,6 +122,22 @@ class IngestionScheduler(
         }
     }
 
+    private fun startHandballIngestion(module: ModuleConfig) {
+        val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
+        scope.launch {
+            while (isActive) {
+                try {
+                    log.info { "[${module.id}] Starte Handball-Abruf..." }
+                    fetchHandballUseCase.fetchAndStore()
+                    log.info { "[${module.id}] Handball-Abruf abgeschlossen." }
+                } catch (e: Exception) {
+                    log.error(e) { "[${module.id}] Fehler beim Handball-Abruf: ${e.message}" }
+                }
+                delay(intervalMs)
+            }
+        }
+    }
+
     // ── Output-Schedules ──────────────────────────────────────────────────────
 
     private fun startOutputSchedules(module: ModuleConfig) {
@@ -133,6 +152,7 @@ class IngestionScheduler(
                             "football" -> sendFootballOutput(module, output)
                             "news"     -> sendNewsOutput(module, output)
                             "pubg"     -> sendPubgOutput(module, output)
+                            "handball" -> log.warn { "[${module.id}] Handball-Ausgabe noch nicht implementiert (Phase 2)." }
                         }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }

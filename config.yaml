@@ -204,6 +204,15 @@ modules:
         params:
           leagueName: "2. Bundesliga"
 
+  - id: handball_mein_team
+    type: handball
+    enabled: false    # HANDBALL_TEAM_ID in .env eintragen und auf true setzen
+    source: handball_api
+    config: {}
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs: []
+
 outputs:
   discord:
     channels:
