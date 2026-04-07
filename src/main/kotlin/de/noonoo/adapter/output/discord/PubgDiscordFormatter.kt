@@ -5,7 +5,6 @@ import de.noonoo.domain.model.PubgMatch
 import de.noonoo.domain.model.PubgMatchParticipant
 import de.noonoo.domain.model.PubgPeriodStats
 import de.noonoo.domain.model.PubgPersonalRecords
-import de.noonoo.domain.model.PubgSeasonStats
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
@@ -131,17 +130,16 @@ object PubgDiscordFormatter {
         return buildString {
             appendLine("📋 **$playerName** – Letzte $limit Matches")
             appendLine("```")
-            appendLine("${"Datum".padEnd(13)}  ${"Map".padEnd(10)}  Pl.  Kills    Dmg  Modus")
-            appendLine("─".repeat(58))
+            appendLine("${"Datum".padEnd(13)}  ${"Map".padEnd(10)}  Pl.  Kills    Dmg")
+            appendLine("─".repeat(48))
             matches.forEach { (m, p) ->
                 val date = m.createdAt.format(dateTimeFmt).padEnd(13)
                 val map = mapName(m.mapName).take(10).padEnd(10)
                 val place = "#${p.winPlace}".padStart(3)
                 val kills = p.kills.toString().padStart(5)
                 val dmg = fmtDmg(p.damageDealt).padStart(6)
-                val mode = modeName(m.gameMode)
                 val win = if (p.winPlace == 1) " 🏆" else ""
-                appendLine("$date  $map  $place  $kills  $dmg  $mode$win")
+                appendLine("$date  $map  $place  $kills  $dmg$win")
             }
             append("```")
         }
@@ -192,29 +190,7 @@ object PubgDiscordFormatter {
         }
     }
 
-    // ── 7. Modus-Vergleich ────────────────────────────────────────────────────
-
-    fun formatModeCompare(playerName: String, stats: List<PubgSeasonStats>): String {
-        val filtered = stats.filter { it.roundsPlayed > 0 }
-        if (filtered.isEmpty()) return "🎮 **$playerName** – Keine Lifetime-Daten."
-        return buildString {
-            appendLine("🎮 **$playerName** – Performance nach Modus")
-            appendLine("```")
-            appendLine("${"Modus".padEnd(10)}  Matches    K/D   Ø Dmg   Win%")
-            appendLine("─".repeat(46))
-            filtered.forEach { s ->
-                val mode = modeName(s.gameMode).padEnd(10)
-                val matches = s.roundsPlayed.toString().padStart(7)
-                val kd = fmtKd(s.kills.toDouble() / (s.losses).coerceAtLeast(1)).padStart(5)
-                val dmg = fmtDmg(if (s.roundsPlayed > 0) s.damageDealt / s.roundsPlayed else 0.0).padStart(6)
-                val winPct = "%.1f%%".format(if (s.roundsPlayed > 0) s.wins * 100.0 / s.roundsPlayed else 0.0).padStart(5)
-                appendLine("$mode  $matches  $kd  $dmg  $winPct")
-            }
-            append("```")
-        }
-    }
-
-    // ── 8. Wochenvergleich ────────────────────────────────────────────────────
+    // ── 7. Wochenvergleich ────────────────────────────────────────────────────
 
     fun formatWeeklyProgress(
         playerName: String,

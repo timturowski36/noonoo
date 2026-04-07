@@ -339,17 +339,6 @@ class IngestionScheduler(
                     delay(500)
                 }
             }
-            "pubg_mode_compare" -> {
-                playerNames.forEach { name ->
-                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
-                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
-                    }
-                    val stats = queryPubgUseCase.getLifetimeStatsByMode(player.accountId)
-                    val msg = PubgDiscordFormatter.formatModeCompare(player.name, stats)
-                    notificationPort.send(output.channel, msg)
-                    delay(500)
-                }
-            }
             "pubg_weekly_ranking" -> {
                 val entries = playerNames.mapNotNull { name ->
                     val player = queryPubgUseCase.getPlayerByName(name) ?: return@mapNotNull null

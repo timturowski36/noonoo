@@ -186,11 +186,6 @@ modules:
         schedule: WEEKLY_MONDAY_10_30
         format: pubg_map_stats
 
-      # Modus-Vergleich – montags um 10:45
-      - type: discord
-        channel: gaming
-        schedule: WEEKLY_MONDAY_10_45
-        format: pubg_mode_compare
 
   - id: bundesliga_2
     type: football
