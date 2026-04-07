@@ -128,6 +128,7 @@ val appModule = module {
             queryPubgUseCase = get(),
             fetchHandballUseCase = get(),
             newsRepository = get(),
+            handballRepository = get(),
             notificationPort = get(),
             webhookChannels = get()
         )
