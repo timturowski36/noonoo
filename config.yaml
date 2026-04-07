@@ -208,13 +208,80 @@ modules:
   # teamId aus der handball.net-URL ablesen: handball4all.{verband}.{numericId}
   - id: handball_mein_team
     type: handball
-    enabled: false    # teamId eintragen und auf true setzen
+    enabled: false    # teamId + Teamnamen eintragen und auf true setzen
     source: handball_api
     config:
       teamId: "handball4all.westfalen.1309001"
     schedule:
       fetchIntervalMinutes: 60
-    outputs: []
+    outputs:
+      # Ligatabelle — montags um 09:00
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_00
+        format: handball_table
+        teams:
+          - "HSG RE/OE"
+        params:
+          leagueName: "Bezirksliga Ruhrgebiet"
+
+      # Letzte Spiele — montags um 09:05
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_05
+        format: handball_last_matches
+        teams:
+          - "HSG RE/OE"
+        params:
+          limit: "5"
+
+      # Nächste Spiele — freitags um 12:00
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_FRIDAY_12_00
+        format: handball_next_matches
+        teams:
+          - "HSG RE/OE"
+        params:
+          limit: "5"
+
+      # Wochenendergebnisse der Liga — montags um 09:10
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_10
+        format: handball_weekend_results
+        teams:
+          - "HSG RE/OE"
+        params:
+          leagueName: "Bezirksliga Ruhrgebiet"
+
+      # Spielbericht (Liveticker) — samstags um 21:30
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_SATURDAY_21_30
+        format: handball_match_report
+        teams:
+          - "HSG RE/OE"
+
+      # Formtabelle — montags um 09:15
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_15
+        format: handball_form_table
+        teams:
+          - "HSG RE/OE"
+        params:
+          leagueName: "Bezirksliga Ruhrgebiet"
+
+      # Nächster Spieltag — freitags um 12:05
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_FRIDAY_12_05
+        format: handball_next_matchday
+        teams:
+          - "HSG RE/OE"
+        params:
+          leagueName: "Bezirksliga Ruhrgebiet"
 
   - id: handball_zweites_team
     type: handball
