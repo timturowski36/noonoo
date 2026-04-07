@@ -324,6 +324,17 @@ modules:
       fetchIntervalMinutes: 60
     outputs: []
 
+  - id: handball_stats_nrw_300268
+    type: handball_statistics
+    enabled: true
+    source: handball_statistics_api
+    config:
+      leagueId: "300268"
+      season: "2526"
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs: []
+
 outputs:
   discord:
     channels:

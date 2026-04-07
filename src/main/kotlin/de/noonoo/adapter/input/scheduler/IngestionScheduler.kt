@@ -10,6 +10,7 @@ import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
 import de.noonoo.domain.port.input.FetchF1DataUseCase
 import de.noonoo.domain.port.input.FetchHandballDataUseCase
+import de.noonoo.domain.port.input.FetchHandballStatisticsUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
@@ -37,6 +38,7 @@ class IngestionScheduler(
     private val fetchPubgUseCase: FetchPubgDataUseCase,
     private val queryPubgUseCase: QueryPubgDataUseCase,
     private val fetchHandballUseCase: FetchHandballDataUseCase,
+    private val fetchHandballStatisticsUseCase: FetchHandballStatisticsUseCase,
     private val fetchF1UseCase: FetchF1DataUseCase,
     private val queryF1UseCase: QueryF1DataUseCase,
     private val f1Repository: F1Repository,
@@ -50,12 +52,13 @@ class IngestionScheduler(
     fun start() {
         modules.filter { it.enabled }.forEach { module ->
             when (module.type) {
-                "football"  -> startFootballIngestion(module)
-                "news"      -> startNewsIngestion(module)
-                "pubg"      -> startPubgIngestion(module)
-                "handball"  -> startHandballIngestion(module)
-                "formula1"  -> startF1Ingestion(module)
-                else        -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
+                "football"             -> startFootballIngestion(module)
+                "news"                 -> startNewsIngestion(module)
+                "pubg"                 -> startPubgIngestion(module)
+                "handball"             -> startHandballIngestion(module)
+                "handball_statistics"  -> startHandballStatisticsIngestion(module)
+                "formula1"             -> startF1Ingestion(module)
+                else                   -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
             }
             startOutputSchedules(module)
         }
@@ -153,6 +156,27 @@ class IngestionScheduler(
         }
     }
 
+    private fun startHandballStatisticsIngestion(module: ModuleConfig) {
+        val leagueId = module.config["leagueId"] ?: run {
+            log.warn { "[${module.id}] Kein 'leagueId' in module.config – handball_statistics-Ingestion übersprungen." }
+            return
+        }
+        val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
+
+        scope.launch {
+            while (isActive) {
+                try {
+                    log.info { "[${module.id}] Starte Handball-Statistiken-Abruf (Liga $leagueId)..." }
+                    fetchHandballStatisticsUseCase.fetchAndStore(leagueId)
+                    log.info { "[${module.id}] Handball-Statistiken-Abruf abgeschlossen." }
+                } catch (e: Exception) {
+                    log.error(e) { "[${module.id}] Fehler beim Handball-Statistiken-Abruf: ${e.message}" }
+                }
+                delay(intervalMs)
+            }
+        }
+    }
+
     private fun startF1Ingestion(module: ModuleConfig) {
         val raceWeekendIntervalMs = (module.schedule.fetchIntervalMinutes.coerceAtMost(5)) * 60_000L
         val normalIntervalMs = module.schedule.fetchIntervalMinutes * 60_000L
@@ -206,11 +230,12 @@ class IngestionScheduler(
                     delay(delayMs)
                     try {
                         when (module.type) {
-                            "football"  -> sendFootballOutput(module, output)
-                            "news"      -> sendNewsOutput(module, output)
-                            "pubg"      -> sendPubgOutput(module, output)
-                            "handball"  -> sendHandballOutput(module, output)
-                            "formula1"  -> sendF1Output(module, output)
+                            "football"            -> sendFootballOutput(module, output)
+                            "news"                -> sendNewsOutput(module, output)
+                            "pubg"                -> sendPubgOutput(module, output)
+                            "handball"            -> sendHandballOutput(module, output)
+                            "handball_statistics" -> log.info { "[${module.id}] Kein Output für handball_statistics konfiguriert." }
+                            "formula1"            -> sendF1Output(module, output)
                         }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }

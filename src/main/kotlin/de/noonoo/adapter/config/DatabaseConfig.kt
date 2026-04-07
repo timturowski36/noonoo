@@ -254,6 +254,31 @@ object DatabaseConfig {
             """.trimIndent())
 
             stmt.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS handball_scorers (
+                    league_id              VARCHAR NOT NULL,
+                    league_name            VARCHAR,
+                    season                 VARCHAR,
+                    fetched_at             TIMESTAMP NOT NULL,
+                    position               INTEGER,
+                    player_name            VARCHAR NOT NULL,
+                    team_name              VARCHAR,
+                    jersey_number          INTEGER,
+                    games_played           INTEGER,
+                    total_goals            INTEGER,
+                    field_goals            INTEGER,
+                    seven_meter_goals      INTEGER,
+                    seven_meter_attempted  INTEGER,
+                    seven_meter_pct        DOUBLE,
+                    last_game              VARCHAR,
+                    goals_per_game         DOUBLE,
+                    field_goals_per_game   DOUBLE,
+                    warnings               INTEGER,
+                    two_minute_suspensions INTEGER,
+                    disqualifications      INTEGER
+                )
+            """.trimIndent())
+
+            stmt.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS pubg_season_stats (
                     account_id       VARCHAR NOT NULL,
                     platform         VARCHAR NOT NULL,
