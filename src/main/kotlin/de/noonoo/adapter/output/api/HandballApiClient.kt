@@ -18,27 +18,11 @@ private val log = KotlinLogging.logger {}
 
 /**
  * Client für die Handball4All JSON-API (H4A) und handball.net HTML-Scraping.
- *
- * @param compositeTeamId vollständige ID im Format "handball4all.westfalen.1309001"
+ * Zustandslos — compositeTeamId wird bei jedem Aufruf übergeben.
  */
 class HandballApiClient(
-    private val httpClient: HttpClient,
-    compositeTeamId: String
+    private val httpClient: HttpClient
 ) : HandballApiPort {
-
-    private val numericTeamId: String
-    private val region: String
-    private val provider: String
-
-    init {
-        val parts = compositeTeamId.split(".")
-        require(parts.size == 3) {
-            "HANDBALL_TEAM_ID muss im Format 'handball4all.westfalen.1309001' angegeben werden, war: '$compositeTeamId'"
-        }
-        provider = parts[0]
-        region = parts[1]
-        numericTeamId = parts[2]
-    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -57,19 +41,45 @@ class HandballApiClient(
         return url
     }
 
+    private fun parseComposite(id: String): Triple<String, String, String> {
+        val parts = id.split(".")
+        require(parts.size == 3) {
+            "teamId muss im Format 'handball4all.westfalen.1309001' sein, war: '$id'"
+        }
+        return Triple(parts[0], parts[1], parts[2]) // provider, region, numericId
+    }
+
     // ── H4A JSON-API ──────────────────────────────────────────────────────────
 
-    override suspend fun fetchTeamSchedule(): List<HandballMatch> {
+    override suspend fun fetchTeamSchedule(compositeTeamId: String): List<HandballMatch> {
+        val (_, _, numericId) = parseComposite(compositeTeamId)
         val base = resolveBaseUrl()
         val raw = httpClient.get(base) {
             parameter("cmd", "data")
             parameter("lvTypeNext", "team")
-            parameter("lvIDNext", numericTeamId)
+            parameter("lvIDNext", numericId)
         }.bodyAsText()
 
         val cleaned = cleanH4AResponse(raw)
         val response = runCatching { json.decodeFromString<H4AScheduleResponse>(cleaned) }
             .onFailure { log.error { "[Handball] Spielplan-Parsing fehlgeschlagen: ${it.message}\nRaw: ${raw.take(200)}" } }
+            .getOrElse { return emptyList() }
+
+        val now = LocalDateTime.now()
+        return response.dataList.mapNotNull { it.toDomain(now) }
+    }
+
+    override suspend fun fetchLeagueSchedule(compositeTeamId: String, leagueId: String): List<HandballMatch> {
+        val base = resolveBaseUrl()
+        val raw = httpClient.get(base) {
+            parameter("cmd", "data")
+            parameter("lvTypeNext", "class")
+            parameter("lvIDNext", leagueId)
+        }.bodyAsText()
+
+        val cleaned = cleanH4AResponse(raw)
+        val response = runCatching { json.decodeFromString<H4AScheduleResponse>(cleaned) }
+            .onFailure { log.error { "[Handball] Liga-Spielplan-Parsing fehlgeschlagen: ${it.message}\nRaw: ${raw.take(200)}" } }
             .getOrElse { return emptyList() }
 
         val now = LocalDateTime.now()
@@ -96,7 +106,8 @@ class HandballApiClient(
 
     // ── handball.net Ticker-Scraping ──────────────────────────────────────────
 
-    override suspend fun fetchMatchTicker(gameId: Long): List<HandballTickerEvent> {
+    override suspend fun fetchMatchTicker(compositeTeamId: String, gameId: Long): List<HandballTickerEvent> {
+        val (provider, region, _) = parseComposite(compositeTeamId)
         val url = "https://www.handball.net/spiele/$provider.$region.$gameId/ticker"
         val html = runCatching {
             httpClient.get(url).bodyAsText()
@@ -225,11 +236,14 @@ class HandballApiClient(
         val gHomePoints: String = "",
         val gGuestPoints: String = "",
         val gGymnasiumName: String = "",
-        val gGymnasiumTown: String = ""
+        val gGymnasiumTown: String = "",
+        val gComment: String = ""
     ) {
         fun toDomain(fetchedAt: LocalDateTime): HandballMatch? {
             val id = gID.toLongOrNull() ?: return null
-            val finished = gHomeGoals.trim().isNotBlank() && gHomeGoals.trim() != " "
+            val goalsScored = gHomeGoals.trim().let { it.isNotBlank() && it != " " }
+            val pointsAwarded = gHomePoints.trim().let { it.isNotBlank() && it != " " }
+            val finished = goalsScored || pointsAwarded
             return HandballMatch(
                 id = id,
                 gameNo = gNo,
@@ -247,6 +261,7 @@ class HandballApiClient(
                 guestPoints = gGuestPoints.trim().toIntOrNull(),
                 venueName = gGymnasiumName,
                 venueTown = gGymnasiumTown,
+                comment = gComment,
                 isFinished = finished,
                 fetchedAt = fetchedAt
             )

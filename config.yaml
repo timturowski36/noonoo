@@ -204,11 +204,24 @@ modules:
         params:
           leagueName: "2. Bundesliga"
 
+  # Handball — beliebig viele Teams möglich, jedes als eigenes Modul
+  # teamId aus der handball.net-URL ablesen: handball4all.{verband}.{numericId}
   - id: handball_mein_team
     type: handball
-    enabled: false    # HANDBALL_TEAM_ID in .env eintragen und auf true setzen
+    enabled: false    # teamId eintragen und auf true setzen
     source: handball_api
-    config: {}
+    config:
+      teamId: "handball4all.westfalen.1309001"
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs: []
+
+  - id: handball_zweites_team
+    type: handball
+    enabled: false
+    source: handball_api
+    config:
+      teamId: "handball4all.westfalen.9999999"  # Eigene ID eintragen
     schedule:
       fetchIntervalMinutes: 60
     outputs: []

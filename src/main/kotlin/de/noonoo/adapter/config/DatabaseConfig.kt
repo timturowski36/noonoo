@@ -154,9 +154,15 @@ object DatabaseConfig {
                     venue_name      VARCHAR,
                     venue_town      VARCHAR,
                     is_finished     BOOLEAN NOT NULL DEFAULT false,
+                    comment         VARCHAR NOT NULL DEFAULT '',
                     fetched_at      TIMESTAMP NOT NULL
                 )
             """.trimIndent())
+
+            // Migration für bestehende DBs ohne comment-Spalte
+            stmt.executeUpdate(
+                "ALTER TABLE handball_matches ADD COLUMN IF NOT EXISTS comment VARCHAR NOT NULL DEFAULT ''"
+            )
 
             stmt.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS handball_standings (

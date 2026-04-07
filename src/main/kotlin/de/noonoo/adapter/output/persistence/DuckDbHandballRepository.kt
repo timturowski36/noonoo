@@ -21,8 +21,8 @@ class DuckDbHandballRepository(private val connection: Connection) : HandballRep
                 home_goals_ht, guest_goals_ht,
                 home_points, guest_points,
                 venue_name, venue_town,
-                is_finished, fetched_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_finished, comment, fetched_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimIndent()
         connection.prepareStatement(sql).use { stmt ->
             for (m in matches) {
@@ -43,7 +43,8 @@ class DuckDbHandballRepository(private val connection: Connection) : HandballRep
                 stmt.setString(15, m.venueName)
                 stmt.setString(16, m.venueTown)
                 stmt.setBoolean(17, m.isFinished)
-                stmt.setTimestamp(18, Timestamp.valueOf(m.fetchedAt))
+                stmt.setString(18, m.comment)
+                stmt.setTimestamp(19, Timestamp.valueOf(m.fetchedAt))
                 stmt.addBatch()
             }
             stmt.executeBatch()
@@ -129,6 +130,7 @@ class DuckDbHandballRepository(private val connection: Connection) : HandballRep
                         guestPoints = rs.getObject("guest_points") as? Int,
                         venueName = rs.getString("venue_name") ?: "",
                         venueTown = rs.getString("venue_town") ?: "",
+                        comment = rs.getString("comment") ?: "",
                         isFinished = rs.getBoolean("is_finished"),
                         fetchedAt = rs.getTimestamp("fetched_at").toLocalDateTime()
                     )

@@ -123,12 +123,16 @@ class IngestionScheduler(
     }
 
     private fun startHandballIngestion(module: ModuleConfig) {
+        val teamId = module.config["teamId"] ?: run {
+            log.warn { "[${module.id}] Kein 'teamId' in module.config – Handball-Ingestion übersprungen." }
+            return
+        }
         val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
         scope.launch {
             while (isActive) {
                 try {
-                    log.info { "[${module.id}] Starte Handball-Abruf..." }
-                    fetchHandballUseCase.fetchAndStore()
+                    log.info { "[${module.id}] Starte Handball-Abruf ($teamId)..." }
+                    fetchHandballUseCase.fetchAndStore(teamId)
                     log.info { "[${module.id}] Handball-Abruf abgeschlossen." }
                 } catch (e: Exception) {
                     log.error(e) { "[${module.id}] Fehler beim Handball-Abruf: ${e.message}" }

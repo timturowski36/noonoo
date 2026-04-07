@@ -103,12 +103,7 @@ val appModule = module {
     single<PubgRepository> { DuckDbPubgRepository(get()) }
 
     // ── Adapter: Handball ─────────────────────────────────────────────────────
-    single<HandballApiPort> {
-        val env = get<io.github.cdimascio.dotenv.Dotenv>()
-        val teamId = env["HANDBALL_TEAM_ID"]
-            ?: error("HANDBALL_TEAM_ID nicht in .env gesetzt (Format: handball4all.westfalen.1309001)")
-        HandballApiClient(get(), teamId)
-    }
+    single<HandballApiPort> { HandballApiClient(get()) }
     single<HandballRepository> { DuckDbHandballRepository(get()) }
     single<FetchHandballDataUseCase> { HandballIngestionService(get(), get()) }
 

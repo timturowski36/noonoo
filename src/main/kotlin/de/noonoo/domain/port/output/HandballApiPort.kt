@@ -5,7 +5,8 @@ import de.noonoo.domain.model.HandballStanding
 import de.noonoo.domain.model.HandballTickerEvent
 
 interface HandballApiPort {
-    suspend fun fetchTeamSchedule(): List<HandballMatch>
+    suspend fun fetchTeamSchedule(compositeTeamId: String): List<HandballMatch>
+    suspend fun fetchLeagueSchedule(compositeTeamId: String, leagueId: String): List<HandballMatch>
     suspend fun fetchLeagueTable(leagueId: String): List<HandballStanding>
-    suspend fun fetchMatchTicker(gameId: Long): List<HandballTickerEvent>
+    suspend fun fetchMatchTicker(compositeTeamId: String, gameId: Long): List<HandballTickerEvent>
 }

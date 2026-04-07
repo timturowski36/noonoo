@@ -19,6 +19,7 @@ data class HandballMatch(
     val guestPoints: Int?,
     val venueName: String,
     val venueTown: String,
+    val comment: String,
     val isFinished: Boolean,
     val fetchedAt: LocalDateTime
 )
