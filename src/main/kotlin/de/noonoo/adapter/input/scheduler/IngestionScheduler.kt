@@ -277,10 +277,11 @@ class IngestionScheduler(
         val playerNames = module.players ?: return
         val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
 
-        val today = java.time.LocalDate.now()
-        val startOfDay = today.atStartOfDay()
-        val endOfDay = today.plusDays(1).atStartOfDay()
-        val startOfWeek = today.with(java.time.DayOfWeek.MONDAY).atStartOfDay()
+        val berlin = java.time.ZoneId.of("Europe/Berlin")
+        val today = java.time.LocalDate.now(berlin)
+        val startOfDay = today.atStartOfDay(berlin).toLocalDateTime()
+        val endOfDay = today.plusDays(1).atStartOfDay(berlin).toLocalDateTime()
+        val startOfWeek = today.with(java.time.DayOfWeek.MONDAY).atStartOfDay(berlin).toLocalDateTime()
         val startOfLastWeek = startOfWeek.minusWeeks(1)
 
         when (output.format) {

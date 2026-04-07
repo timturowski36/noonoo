@@ -176,7 +176,7 @@ object PubgDiscordFormatter {
             appendLine("```")
             appendLine("#   ${"Spieler".padEnd(16)}  Matches  K/D   Ø Dmg  Siege")
             appendLine("─".repeat(50))
-            entries.sortedByDescending { it.second.kills.toDouble() / it.second.matches.coerceAtLeast(1) }
+            entries.sortedByDescending { it.second.kdRatio }
                 .forEachIndexed { i, (name, s) ->
                     val rank = "${i + 1}.".padEnd(3)
                     val n = name.take(16).padEnd(16)
