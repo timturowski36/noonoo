@@ -2,7 +2,7 @@
 
 **NooNoo** ist ein modularer Datenaggregator in Kotlin – benannt nach dem fleißigen kleinen Roboter aus den Teletubbys, der unermüdlich alles aufsammelt und aufräumt.
 
-NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, Handball, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
+NooNoo saugt automatisch Daten aus verschiedenen Quellen (Bundesliga, Handball, Formel 1, PUBG, News-RSS), speichert sie lokal in einer DuckDB-Datenbank und liefert aufbereitete Zusammenfassungen über konfigurierbare Ausgabekanäle (Discord) – genau dann, wenn man sie braucht.
 
 Die Ingestion und die Ausgabe laufen vollständig entkoppelt: Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten; Ausgaben folgen einem eigenen, konfigurierbaren Schedule.
 
@@ -40,11 +40,12 @@ Die Datenbank wird kontinuierlich im Hintergrund aktuell gehalten. Ausgaben werd
 | 3 | News-Module | RSS-Feeds (Heise, Tagesschau) → Discord mit Keyword-Filterung | Abgeschlossen |
 | 4 | PUBG-Daten | Spieler- & Match-Statistiken via PUBG API → DuckDB → Discord | Abgeschlossen |
 | 5 | Handball-Modul | H4A-API + handball.net-Scraping → DuckDB → 7 Discord-Ausgabeformate (Tabelle, Spielplan, Ticker, ...) | Abgeschlossen |
-| 6 | Google Sheets Export | Daten aus DuckDB → Google Sheets | Geplant |
-| 7 | Wetter- & Finanzdaten | Wetter-API, Finance-API → Discord | Geplant |
-| 8 | KI-Zusammenfassungen | Claude API für aufbereitete Textzusammenfassungen | Geplant |
-| 9 | Web-Frontend | Einfaches Frontend für manuelle Abfragen | Geplant |
-| 10 | Digitaler Bilderrahmen | Visualisierung auf dediziertem Display | Geplant |
+| 6 | Formel-1-Modul | Jolpica/Ergast-API → DuckDB → 4 Discord-Ausgabeformate (Nächstes Rennen, Ergebnisse, WM-Stand, Strecken-History) | Abgeschlossen |
+| 7 | Google Sheets Export | Daten aus DuckDB → Google Sheets | Geplant |
+| 8 | Wetter- & Finanzdaten | Wetter-API, Finance-API → Discord | Geplant |
+| 9 | KI-Zusammenfassungen | Claude API für aufbereitete Textzusammenfassungen | Geplant |
+| 10 | Web-Frontend | Einfaches Frontend für manuelle Abfragen | Geplant |
+| 11 | Digitaler Bilderrahmen | Visualisierung auf dediziertem Display | Geplant |
 
 Jedes Modul wird als eigenständiger Adapter implementiert und über `config.yaml` aktiviert oder deaktiviert – ohne Code-Änderungen.
 
@@ -88,26 +89,32 @@ noonoo/
     │   │                         # PubgPlayer, PubgMatch, PubgMatchParticipant,
     │   │                         # PubgSeasonStats, PubgPeriodStats, PubgMapStat,
     │   │                         # PubgPersonalRecords,
-    │   │                         # HandballMatch, HandballStanding, HandballTickerEvent
+    │   │                         # HandballMatch, HandballStanding, HandballTickerEvent,
+    │   │                         # F1Race, F1RaceResult, F1Standing
     │   ├── port/
     │   │   ├── input/            # FetchDataUseCase, QueryDataUseCase,
     │   │   │                     # FetchNewsUseCase, FetchPubgDataUseCase,
-    │   │   │                     # QueryPubgDataUseCase, FetchHandballDataUseCase
+    │   │   │                     # QueryPubgDataUseCase, FetchHandballDataUseCase,
+    │   │   │                     # FetchF1DataUseCase, QueryF1DataUseCase
     │   │   └── output/           # MatchRepository, FootballApiPort,
     │   │                         # NewsRepository, PubgApiPort, PubgRepository,
-    │   │                         # HandballRepository, HandballApiPort
+    │   │                         # HandballRepository, HandballApiPort,
+    │   │                         # F1Repository, F1ApiPort
     │   └── service/              # IngestionService, QueryService,
     │                             # NewsIngestionService, PubgIngestionService,
-    │                             # PubgQueryService, HandballIngestionService
+    │                             # PubgQueryService, HandballIngestionService,
+    │                             # F1IngestionService, F1QueryService
     └── adapter/
         ├── input/scheduler/      # IngestionScheduler
         ├── output/
         │   ├── api/              # OpenLigaDbClient, RssNewsClient, PubgApiClient,
-        │   │                     # HandballApiClient (H4A-API + handball.net-Scraping)
+        │   │                     # HandballApiClient (H4A-API + handball.net-Scraping),
+        │   │                     # JolpicaF1Client (Ergast/Jolpica-API)
         │   ├── persistence/      # DuckDbRepository, DuckDbNewsRepository,
-        │   │                     # DuckDbPubgRepository, DuckDbHandballRepository
+        │   │                     # DuckDbPubgRepository, DuckDbHandballRepository,
+        │   │                     # DuckDbF1Repository
         │   └── discord/          # DiscordSender, PubgDiscordFormatter,
-        │                         # HandballDiscordFormatter
+        │                         # HandballDiscordFormatter, F1DiscordFormatter
         └── config/               # AppModule, ConfigLoader, DatabaseConfig
 ```
 
@@ -257,6 +264,10 @@ modules:
 | `handball_match_report` | handball | Spielbericht mit vollständigem Ticker (Torschützen, Trikotnummern, Zeitstrafen) |
 | `handball_form_table` | handball | Formtabelle: letzte 5 Spiele pro Team, sortiert nach Formpunkten |
 | `handball_next_matchday` | handball | Alle Spiele des nächsten Spieltags der Liga |
+| `f1_next_race` | formula1 | Nächster Grand Prix mit Datum, Qualifying- und Renndatum, Strecke |
+| `f1_last_race` | formula1 | Ergebnisse des letzten Rennens (Top 10, Punkte, schnellste Runde) |
+| `f1_standings` | formula1 | WM-Stand: Fahrerwertung (Top 10) + Konstrukteurswertung (Top 5) |
+| `f1_circuit_history` | formula1 | Vorjahressieger auf der nächsten Strecke |
 
 ---
 
@@ -309,6 +320,64 @@ Die `teamId` setzt sich zusammen aus `handball4all.{verband}.{numericId}` — ab
 
 - Kein API-Key erforderlich (H4A-API ist öffentlich)
 - Teamname in `teams:` muss exakt mit dem Namen in der H4A-API übereinstimmen
+- `DISCORD_SPORT_WEBHOOK` in `.env` eintragen
+- Modul auf `enabled: true` setzen
+
+---
+
+## Formel-1-Modul
+
+Das F1-Modul bezieht Daten von der öffentlichen **Jolpica/Ergast-API** – keine Registrierung oder API-Key erforderlich.
+
+Folgende Daten werden abgerufen und in DuckDB gespeichert:
+
+- **Rennkalender** der aktuellen Saison (Strecken, Qualifying- und Renndaten)
+- **Letztes Rennergebnis** (Positionen, Punkte, schnellste Runde)
+- **Fahrerwertung** und **Konstrukteurswertung**
+- **Vorjahresergebnisse** aller Strecken des aktuellen Kalenders (einmalig beim Start)
+
+### Besonderheiten
+
+- **Adaptive Fetch-Rate**: An Rennwochenenden (von FP1 bis Rennsonntag) wird das Abfrage-Intervall automatisch auf maximal 5 Minuten reduziert.
+- **Vorjahres-History**: Beim ersten Start werden die Rennergebnisse der Vorsaison für alle Strecken des aktuellen Kalenders geladen – damit steht der Strecken-History-Output sofort zur Verfügung. Folgestarts überspringen diesen Schritt automatisch.
+- **Rate-Limit**: 300 ms Pause zwischen aufeinanderfolgenden API-Calls (Jolpica erlaubt ~4 Requests/Sekunde).
+
+### Konfiguration
+
+```yaml
+- id: formula1_2025
+  type: formula1
+  enabled: true
+  source: jolpica_f1
+  config:
+    season: "2025"
+  schedule:
+    fetchIntervalMinutes: 60      # außerhalb von Rennwochenenden
+  outputs:
+    - type: discord
+      channel: sport
+      schedule: WEEKLY_MONDAY_09_00
+      format: f1_last_race
+
+    - type: discord
+      channel: sport
+      schedule: WEEKLY_MONDAY_09_05
+      format: f1_standings
+
+    - type: discord
+      channel: sport
+      schedule: WEEKLY_THURSDAY_18_00
+      format: f1_next_race
+
+    - type: discord
+      channel: sport
+      schedule: WEEKLY_THURSDAY_18_05
+      format: f1_circuit_history
+```
+
+### Voraussetzungen
+
+- Kein API-Key erforderlich (Jolpica-API ist öffentlich)
 - `DISCORD_SPORT_WEBHOOK` in `.env` eintragen
 - Modul auf `enabled: true` setzen
 
