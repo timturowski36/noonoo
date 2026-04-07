@@ -3,10 +3,13 @@ package de.noonoo.adapter.input.scheduler
 import de.noonoo.adapter.config.ModuleConfig
 import de.noonoo.adapter.config.OutputConfig
 import de.noonoo.adapter.output.discord.DiscordSender
+import de.noonoo.adapter.output.discord.PubgDiscordFormatter
 import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
+import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
+import de.noonoo.domain.port.input.QueryPubgDataUseCase
 import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -24,6 +27,8 @@ class IngestionScheduler(
     private val fetchUseCase: FetchDataUseCase,
     private val queryUseCase: QueryDataUseCase,
     private val fetchNewsUseCase: FetchNewsUseCase,
+    private val fetchPubgUseCase: FetchPubgDataUseCase,
+    private val queryPubgUseCase: QueryPubgDataUseCase,
     private val newsRepository: NewsRepository,
     private val notificationPort: NotificationPort,
     private val webhookChannels: Map<String, String>
@@ -35,6 +40,7 @@ class IngestionScheduler(
             when (module.type) {
                 "football" -> startFootballIngestion(module)
                 "news"     -> startNewsIngestion(module)
+                "pubg"     -> startPubgIngestion(module)
                 else       -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
             }
             startOutputSchedules(module)
@@ -88,6 +94,31 @@ class IngestionScheduler(
         }
     }
 
+    private fun startPubgIngestion(module: ModuleConfig) {
+        val platform = module.config["platform"] ?: run {
+            log.warn { "[${module.id}] Kein 'platform' in module.config – Ingestion übersprungen." }
+            return
+        }
+        val players = module.players ?: run {
+            log.warn { "[${module.id}] Keine 'players' definiert – Ingestion übersprungen." }
+            return
+        }
+        val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
+
+        scope.launch {
+            while (isActive) {
+                try {
+                    log.info { "[${module.id}] Starte PUBG-Abruf ($platform, ${players.size} Spieler)..." }
+                    fetchPubgUseCase.fetchAndStore(players, platform)
+                    log.info { "[${module.id}] PUBG-Abruf abgeschlossen." }
+                } catch (e: Exception) {
+                    log.error(e) { "[${module.id}] Fehler beim PUBG-Abruf: ${e.message}" }
+                }
+                delay(intervalMs)
+            }
+        }
+    }
+
     // ── Output-Schedules ──────────────────────────────────────────────────────
 
     private fun startOutputSchedules(module: ModuleConfig) {
@@ -101,6 +132,7 @@ class IngestionScheduler(
                         when (module.type) {
                             "football" -> sendFootballOutput(module, output)
                             "news"     -> sendNewsOutput(module, output)
+                            "pubg"     -> sendPubgOutput(module, output)
                         }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }
@@ -236,6 +268,105 @@ class IngestionScheduler(
                 null
             }
         }
+    }
+
+    // ── PUBG Output ───────────────────────────────────────────────────────────
+
+    private suspend fun sendPubgOutput(module: ModuleConfig, output: OutputConfig) {
+        val platform = module.config["platform"] ?: return
+        val playerNames = module.players ?: return
+        val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
+
+        val berlin = java.time.ZoneId.of("Europe/Berlin")
+        val today = java.time.LocalDate.now(berlin)
+        val startOfDay = today.atStartOfDay(berlin).toLocalDateTime()
+        val endOfDay = today.plusDays(1).atStartOfDay(berlin).toLocalDateTime()
+        val startOfWeek = today.with(java.time.DayOfWeek.MONDAY).atStartOfDay(berlin).toLocalDateTime()
+        val startOfLastWeek = startOfWeek.minusWeeks(1)
+
+        when (output.format) {
+            "pubg_daily_stats" -> {
+                playerNames.forEach { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
+                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
+                    }
+                    val stats = queryPubgUseCase.getPeriodStats(player.accountId, startOfDay, endOfDay)
+                    val msg = PubgDiscordFormatter.formatDailyStats(player.name, platform, stats)
+                    notificationPort.send(output.channel, msg)
+                    delay(500)
+                }
+            }
+            "pubg_weekly_stats" -> {
+                playerNames.forEach { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
+                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
+                    }
+                    val stats = queryPubgUseCase.getPeriodStats(player.accountId, startOfWeek, endOfDay)
+                    val msg = PubgDiscordFormatter.formatWeeklyStats(player.name, platform, stats)
+                    notificationPort.send(output.channel, msg)
+                    delay(500)
+                }
+            }
+            "pubg_records" -> {
+                playerNames.forEach { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
+                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
+                    }
+                    val records = queryPubgUseCase.getRecords(player.accountId)
+                    val msg = PubgDiscordFormatter.formatRecords(player.name, records)
+                    notificationPort.send(output.channel, msg)
+                    delay(500)
+                }
+            }
+            "pubg_recent_matches" -> {
+                playerNames.forEach { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
+                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
+                    }
+                    val matches = queryPubgUseCase.getRecentMatches(player.accountId, limit)
+                    val msg = PubgDiscordFormatter.formatRecentMatches(player.name, limit, matches)
+                    notificationPort.send(output.channel, msg)
+                    delay(500)
+                }
+            }
+            "pubg_map_stats" -> {
+                playerNames.forEach { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
+                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
+                    }
+                    val stats = queryPubgUseCase.getMapStats(player.accountId)
+                    val msg = PubgDiscordFormatter.formatMapStats(player.name, stats)
+                    notificationPort.send(output.channel, msg)
+                    delay(500)
+                }
+            }
+            "pubg_weekly_ranking" -> {
+                val entries = playerNames.mapNotNull { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: return@mapNotNull null
+                    val stats = queryPubgUseCase.getPeriodStats(player.accountId, startOfWeek, endOfDay)
+                    if (stats.matches == 0) return@mapNotNull null
+                    player.name to stats
+                }
+                if (entries.isNotEmpty()) {
+                    val msg = PubgDiscordFormatter.formatWeeklyRanking(entries)
+                    notificationPort.send(output.channel, msg)
+                }
+            }
+            "pubg_weekly_progress" -> {
+                playerNames.forEach { name ->
+                    val player = queryPubgUseCase.getPlayerByName(name) ?: run {
+                        log.warn { "[${module.id}] Spieler '$name' nicht in DB." }; return@forEach
+                    }
+                    val lastWeek = queryPubgUseCase.getPeriodStats(player.accountId, startOfLastWeek, startOfWeek)
+                    val thisWeek = queryPubgUseCase.getPeriodStats(player.accountId, startOfWeek, endOfDay)
+                    val msg = PubgDiscordFormatter.formatWeeklyProgress(player.name, lastWeek, thisWeek)
+                    notificationPort.send(output.channel, msg)
+                    delay(500)
+                }
+            }
+            else -> log.warn { "[${module.id}] Unbekanntes PUBG-Format: ${output.format}" }
+        }
+        log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
     }
 
     // ── News Output ───────────────────────────────────────────────────────────

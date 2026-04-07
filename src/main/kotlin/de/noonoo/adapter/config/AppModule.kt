@@ -2,20 +2,28 @@ package de.noonoo.adapter.config
 
 import de.noonoo.adapter.input.scheduler.IngestionScheduler
 import de.noonoo.adapter.output.api.OpenLigaDbClient
+import de.noonoo.adapter.output.api.PubgApiClient
 import de.noonoo.adapter.output.api.RssNewsClient
 import de.noonoo.adapter.output.discord.DiscordSender
 import de.noonoo.adapter.output.persistence.DuckDbNewsRepository
+import de.noonoo.adapter.output.persistence.DuckDbPubgRepository
 import de.noonoo.adapter.output.persistence.DuckDbRepository
 import de.noonoo.domain.port.input.FetchDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
+import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
+import de.noonoo.domain.port.input.QueryPubgDataUseCase
 import de.noonoo.domain.port.output.FootballApiPort
 import de.noonoo.domain.port.output.MatchRepository
 import de.noonoo.domain.port.output.NewsApiPort
 import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
+import de.noonoo.domain.port.output.PubgApiPort
+import de.noonoo.domain.port.output.PubgRepository
 import de.noonoo.domain.service.IngestionService
 import de.noonoo.domain.service.NewsIngestionService
+import de.noonoo.domain.service.PubgIngestionService
+import de.noonoo.domain.service.PubgQueryService
 import de.noonoo.domain.service.QueryService
 import io.github.cdimascio.dotenv.dotenv
 import io.ktor.client.*
@@ -80,6 +88,14 @@ val appModule = module {
     single<NewsApiPort> { RssNewsClient(get()) }
     single<NewsRepository> { DuckDbNewsRepository(get()) }
 
+    // ── Adapter: PUBG ─────────────────────────────────────────────────────────
+    single<PubgApiPort> {
+        val env = get<io.github.cdimascio.dotenv.Dotenv>()
+        val apiKey = env["PUBG_API_KEY"] ?: ""
+        PubgApiClient(get(), apiKey)
+    }
+    single<PubgRepository> { DuckDbPubgRepository(get()) }
+
     // ── Adapter: Output ───────────────────────────────────────────────────────
     single<NotificationPort> { DiscordSender(get()) }
 
@@ -87,6 +103,8 @@ val appModule = module {
     single<FetchDataUseCase> { IngestionService(get(), get()) }
     single<QueryDataUseCase> { QueryService(get(), get()) }
     single<FetchNewsUseCase> { NewsIngestionService(get(), get()) }
+    single<FetchPubgDataUseCase> { PubgIngestionService(get(), get()) }
+    single<QueryPubgDataUseCase> { PubgQueryService(get()) }
 
     // ── Scheduler ─────────────────────────────────────────────────────────────
     single {
@@ -95,6 +113,8 @@ val appModule = module {
             fetchUseCase = get(),
             queryUseCase = get(),
             fetchNewsUseCase = get(),
+            fetchPubgUseCase = get(),
+            queryPubgUseCase = get(),
             newsRepository = get(),
             notificationPort = get(),
             webhookChannels = get()
