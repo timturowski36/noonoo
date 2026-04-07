@@ -3,15 +3,19 @@ package de.noonoo.adapter.input.scheduler
 import de.noonoo.adapter.config.ModuleConfig
 import de.noonoo.adapter.config.OutputConfig
 import de.noonoo.adapter.output.discord.DiscordSender
+import de.noonoo.adapter.output.discord.F1DiscordFormatter
 import de.noonoo.adapter.output.discord.HandballDiscordFormatter
 import de.noonoo.adapter.output.discord.PubgDiscordFormatter
 import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
+import de.noonoo.domain.port.input.FetchF1DataUseCase
 import de.noonoo.domain.port.input.FetchHandballDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
+import de.noonoo.domain.port.input.QueryF1DataUseCase
 import de.noonoo.domain.port.input.QueryPubgDataUseCase
+import de.noonoo.domain.port.output.F1Repository
 import de.noonoo.domain.port.output.HandballRepository
 import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
@@ -33,6 +37,9 @@ class IngestionScheduler(
     private val fetchPubgUseCase: FetchPubgDataUseCase,
     private val queryPubgUseCase: QueryPubgDataUseCase,
     private val fetchHandballUseCase: FetchHandballDataUseCase,
+    private val fetchF1UseCase: FetchF1DataUseCase,
+    private val queryF1UseCase: QueryF1DataUseCase,
+    private val f1Repository: F1Repository,
     private val newsRepository: NewsRepository,
     private val handballRepository: HandballRepository,
     private val notificationPort: NotificationPort,
@@ -43,11 +50,12 @@ class IngestionScheduler(
     fun start() {
         modules.filter { it.enabled }.forEach { module ->
             when (module.type) {
-                "football" -> startFootballIngestion(module)
-                "news"     -> startNewsIngestion(module)
-                "pubg"     -> startPubgIngestion(module)
-                "handball" -> startHandballIngestion(module)
-                else       -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
+                "football"  -> startFootballIngestion(module)
+                "news"      -> startNewsIngestion(module)
+                "pubg"      -> startPubgIngestion(module)
+                "handball"  -> startHandballIngestion(module)
+                "formula1"  -> startF1Ingestion(module)
+                else        -> log.warn { "[${module.id}] Unbekannter Modultyp: ${module.type}" }
             }
             startOutputSchedules(module)
         }
@@ -145,6 +153,48 @@ class IngestionScheduler(
         }
     }
 
+    private fun startF1Ingestion(module: ModuleConfig) {
+        val raceWeekendIntervalMs = (module.schedule.fetchIntervalMinutes.coerceAtMost(5)) * 60_000L
+        val normalIntervalMs = module.schedule.fetchIntervalMinutes * 60_000L
+
+        // Vorjahresergebnisse einmalig beim Start laden
+        scope.launch {
+            try {
+                log.info { "[${module.id}] Lade F1-Vorjahresergebnisse (einmalig)..." }
+                fetchF1UseCase.fetchPreviousYearResults()
+            } catch (e: Exception) {
+                log.error(e) { "[${module.id}] Fehler beim Vorjahres-Abruf: ${e.message}" }
+            }
+        }
+
+        scope.launch {
+            while (isActive) {
+                try {
+                    log.info { "[${module.id}] Starte F1-Abruf..." }
+                    fetchF1UseCase.fetchAndStore()
+                    log.info { "[${module.id}] F1-Abruf abgeschlossen." }
+                } catch (e: Exception) {
+                    log.error(e) { "[${module.id}] Fehler beim F1-Abruf: ${e.message}" }
+                }
+                val intervalMs = if (isRaceWeekend()) raceWeekendIntervalMs else normalIntervalMs
+                delay(intervalMs)
+            }
+        }
+    }
+
+    private fun isRaceWeekend(): Boolean {
+        val today = LocalDate.now()
+        return try {
+            val races = f1Repository.getCurrentSeasonRaces()
+            races.any { race ->
+                val start = race.fp1Date ?: race.qualiDate ?: race.raceDate
+                !today.isBefore(start) && !today.isAfter(race.raceDate)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     // ── Output-Schedules ──────────────────────────────────────────────────────
 
     private fun startOutputSchedules(module: ModuleConfig) {
@@ -156,10 +206,11 @@ class IngestionScheduler(
                     delay(delayMs)
                     try {
                         when (module.type) {
-                            "football" -> sendFootballOutput(module, output)
-                            "news"     -> sendNewsOutput(module, output)
-                            "pubg"     -> sendPubgOutput(module, output)
-                            "handball" -> sendHandballOutput(module, output)
+                            "football"  -> sendFootballOutput(module, output)
+                            "news"      -> sendNewsOutput(module, output)
+                            "pubg"      -> sendPubgOutput(module, output)
+                            "handball"  -> sendHandballOutput(module, output)
+                            "formula1"  -> sendF1Output(module, output)
                         }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }
@@ -462,6 +513,45 @@ class IngestionScheduler(
         runCatching {
             java.time.LocalDateTime.parse("$date $time", DateTimeFormatter.ofPattern("dd.MM.yy HH:mm"))
         }.getOrElse { java.time.LocalDateTime.MIN }
+
+    // ── F1 Output ─────────────────────────────────────────────────────────────
+
+    private suspend fun sendF1Output(module: ModuleConfig, output: OutputConfig) {
+        val message: String? = when (output.format) {
+            "f1_next_race" -> {
+                val race = queryF1UseCase.getNextRace() ?: run {
+                    log.warn { "[${module.id}] Kein nächstes Rennen in DB." }
+                    return
+                }
+                F1DiscordFormatter.formatNextRace(race)
+            }
+            "f1_last_race" -> {
+                val results = queryF1UseCase.getLastRaceResults()
+                F1DiscordFormatter.formatLastRace(results)
+            }
+            "f1_standings" -> {
+                val driverStandings = queryF1UseCase.getDriverStandings()
+                val constructorStandings = queryF1UseCase.getConstructorStandings()
+                F1DiscordFormatter.formatStandings(driverStandings, constructorStandings)
+            }
+            "f1_circuit_history" -> {
+                val nextRace = queryF1UseCase.getNextRace() ?: run {
+                    log.warn { "[${module.id}] Kein nächstes Rennen in DB." }
+                    return
+                }
+                val winner = queryF1UseCase.getPreviousYearWinnerOnNextCircuit()
+                F1DiscordFormatter.formatCircuitHistory(nextRace, winner)
+            }
+            else -> {
+                log.warn { "[${module.id}] Unbekanntes F1-Format: ${output.format}" }
+                null
+            }
+        }
+        if (message != null) {
+            notificationPort.send(output.channel, message)
+            log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
+        }
+    }
 
     // ── News Output ───────────────────────────────────────────────────────────
 

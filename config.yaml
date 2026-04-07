@@ -283,6 +283,37 @@ modules:
         params:
           leagueName: "Bezirksliga Ruhrgebiet"
 
+  - id: formula1_2025
+    type: formula1
+    enabled: true
+    source: jolpica_f1
+    config:
+      season: "2025"
+    schedule:
+      fetchIntervalMinutes: 60
+    outputs:
+      # Letztes Rennen + Fahrerwertung – montags um 09:00
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_00
+        format: f1_last_race
+
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_05
+        format: f1_standings
+
+      # Nächstes Rennen + Streckenwinner – donnerstags um 18:00
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_THURSDAY_18_00
+        format: f1_next_race
+
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_THURSDAY_18_05
+        format: f1_circuit_history
+
   - id: handball_zweites_team
     type: handball
     enabled: false
