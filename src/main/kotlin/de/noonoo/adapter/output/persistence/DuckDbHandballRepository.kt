@@ -108,8 +108,66 @@ class DuckDbHandballRepository(private val connection: Connection) : HandballRep
 
     override fun findMatchesByLeague(leagueId: String): List<HandballMatch> {
         val sql = "SELECT * FROM handball_matches WHERE league_id = ? ORDER BY kickoff_date, kickoff_time"
+        return queryMatches(sql, listOf(leagueId))
+    }
+
+    override fun findMatchesByTeamName(teamName: String): List<HandballMatch> {
+        val sql = "SELECT * FROM handball_matches WHERE home_team = ? OR guest_team = ? ORDER BY kickoff_date, kickoff_time"
+        return queryMatches(sql, listOf(teamName, teamName))
+    }
+
+    override fun findStandingsByLeague(leagueId: String): List<HandballStanding> {
+        val sql = "SELECT * FROM handball_standings WHERE league_id = ? ORDER BY position"
         connection.prepareStatement(sql).use { stmt ->
             stmt.setString(1, leagueId)
+            stmt.executeQuery().use { rs ->
+                val result = mutableListOf<HandballStanding>()
+                while (rs.next()) {
+                    result += HandballStanding(
+                        leagueId = rs.getString("league_id"),
+                        position = rs.getInt("position"),
+                        teamName = rs.getString("team_name"),
+                        played = rs.getInt("played"),
+                        won = rs.getInt("won"),
+                        draw = rs.getInt("draw"),
+                        lost = rs.getInt("lost"),
+                        goalsFor = rs.getInt("goals_for"),
+                        goalsAgainst = rs.getInt("goals_against"),
+                        pointsPlus = rs.getInt("points_plus"),
+                        pointsMinus = rs.getInt("points_minus"),
+                        fetchedAt = rs.getTimestamp("fetched_at").toLocalDateTime()
+                    )
+                }
+                return result
+            }
+        }
+    }
+
+    override fun findTickerEventsByMatch(matchId: Long): List<HandballTickerEvent> {
+        val sql = "SELECT * FROM handball_ticker_events WHERE match_id = ? ORDER BY game_minute"
+        connection.prepareStatement(sql).use { stmt ->
+            stmt.setLong(1, matchId)
+            stmt.executeQuery().use { rs ->
+                val result = mutableListOf<HandballTickerEvent>()
+                while (rs.next()) {
+                    result += HandballTickerEvent(
+                        matchId = rs.getLong("match_id"),
+                        gameMinute = rs.getString("game_minute") ?: "",
+                        eventType = rs.getString("event_type") ?: "",
+                        homeScore = rs.getObject("home_score") as? Int,
+                        awayScore = rs.getObject("away_score") as? Int,
+                        description = rs.getString("description") ?: "",
+                        fetchedAt = rs.getTimestamp("fetched_at").toLocalDateTime()
+                    )
+                }
+                return result
+            }
+        }
+    }
+
+    private fun queryMatches(sql: String, params: List<String>): List<HandballMatch> {
+        connection.prepareStatement(sql).use { stmt ->
+            params.forEachIndexed { i, p -> stmt.setString(i + 1, p) }
             stmt.executeQuery().use { rs ->
                 val result = mutableListOf<HandballMatch>()
                 while (rs.next()) {

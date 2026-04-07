@@ -3,6 +3,7 @@ package de.noonoo.adapter.input.scheduler
 import de.noonoo.adapter.config.ModuleConfig
 import de.noonoo.adapter.config.OutputConfig
 import de.noonoo.adapter.output.discord.DiscordSender
+import de.noonoo.adapter.output.discord.HandballDiscordFormatter
 import de.noonoo.adapter.output.discord.PubgDiscordFormatter
 import de.noonoo.domain.model.Team
 import de.noonoo.domain.port.input.FetchDataUseCase
@@ -11,6 +12,7 @@ import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
 import de.noonoo.domain.port.input.QueryPubgDataUseCase
+import de.noonoo.domain.port.output.HandballRepository
 import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -32,6 +34,7 @@ class IngestionScheduler(
     private val queryPubgUseCase: QueryPubgDataUseCase,
     private val fetchHandballUseCase: FetchHandballDataUseCase,
     private val newsRepository: NewsRepository,
+    private val handballRepository: HandballRepository,
     private val notificationPort: NotificationPort,
     private val webhookChannels: Map<String, String>
 ) {
@@ -156,7 +159,7 @@ class IngestionScheduler(
                             "football" -> sendFootballOutput(module, output)
                             "news"     -> sendNewsOutput(module, output)
                             "pubg"     -> sendPubgOutput(module, output)
-                            "handball" -> log.warn { "[${module.id}] Handball-Ausgabe noch nicht implementiert (Phase 2)." }
+                            "handball" -> sendHandballOutput(module, output)
                         }
                     } catch (e: Exception) {
                         log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }
@@ -392,6 +395,73 @@ class IngestionScheduler(
         }
         log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
     }
+
+    // ── Handball Output ───────────────────────────────────────────────────────
+
+    private suspend fun sendHandballOutput(module: ModuleConfig, output: OutputConfig) {
+        val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
+            log.warn { "[${module.id}] Kein Teamname in 'teams' oder 'params.teamName' – Handball-Ausgabe übersprungen." }
+            return
+        }
+        val leagueName = output.params?.get("leagueName") ?: ""
+        val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
+        val now = LocalDateTime.now()
+
+        val teamMatches = handballRepository.findMatchesByTeamName(teamName)
+        val leagueId = teamMatches.firstOrNull()?.leagueId ?: run {
+            log.warn { "[${module.id}] Keine Matches für Team '$teamName' in DB – Handball-Ausgabe übersprungen." }
+            return
+        }
+
+        val message: String? = when (output.format) {
+            "handball_table" -> {
+                val standings = handballRepository.findStandingsByLeague(leagueId)
+                HandballDiscordFormatter.formatHandballTable(standings, leagueName, now)
+            }
+            "handball_last_matches" -> {
+                HandballDiscordFormatter.formatHandballLastMatches(teamMatches, teamName, now, limit)
+            }
+            "handball_next_matches" -> {
+                HandballDiscordFormatter.formatHandballNextMatches(teamMatches, teamName, now, limit)
+            }
+            "handball_weekend_results" -> {
+                val allMatches = handballRepository.findMatchesByLeague(leagueId)
+                HandballDiscordFormatter.formatHandballWeekendResults(allMatches, leagueName, now)
+            }
+            "handball_match_report" -> {
+                val lastMatch = teamMatches.filter { it.isFinished }
+                    .maxByOrNull { parseHandballKickoff(it.kickoffDate, it.kickoffTime) } ?: run {
+                    log.warn { "[${module.id}] Kein abgeschlossenes Spiel für '$teamName' gefunden." }
+                    return
+                }
+                val ticker = handballRepository.findTickerEventsByMatch(lastMatch.id)
+                HandballDiscordFormatter.formatHandballMatchReport(lastMatch, ticker, now)
+            }
+            "handball_form_table" -> {
+                val allMatches = handballRepository.findMatchesByLeague(leagueId)
+                val standings = handballRepository.findStandingsByLeague(leagueId)
+                HandballDiscordFormatter.formatHandballFormTable(allMatches, standings, leagueName, now)
+            }
+            "handball_next_matchday" -> {
+                val allMatches = handballRepository.findMatchesByLeague(leagueId)
+                HandballDiscordFormatter.formatHandballNextMatchday(allMatches, leagueName, now)
+            }
+            else -> {
+                log.warn { "[${module.id}] Unbekanntes Handball-Format: ${output.format}" }
+                null
+            }
+        }
+
+        if (message != null) {
+            notificationPort.send(output.channel, message)
+            log.info { "[${module.id}] '${output.format}' → #${output.channel}." }
+        }
+    }
+
+    private fun parseHandballKickoff(date: String, time: String): java.time.LocalDateTime =
+        runCatching {
+            java.time.LocalDateTime.parse("$date $time", DateTimeFormatter.ofPattern("dd.MM.yy HH:mm"))
+        }.getOrElse { java.time.LocalDateTime.MIN }
 
     // ── News Output ───────────────────────────────────────────────────────────
 
