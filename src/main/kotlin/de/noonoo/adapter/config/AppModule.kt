@@ -2,20 +2,26 @@ package de.noonoo.adapter.config
 
 import de.noonoo.adapter.input.scheduler.IngestionScheduler
 import de.noonoo.adapter.output.api.HandballApiClient
+import de.noonoo.adapter.output.api.JolpicaF1Client
 import de.noonoo.adapter.output.api.OpenLigaDbClient
 import de.noonoo.adapter.output.api.PubgApiClient
 import de.noonoo.adapter.output.api.RssNewsClient
 import de.noonoo.adapter.output.discord.DiscordSender
+import de.noonoo.adapter.output.persistence.DuckDbF1Repository
 import de.noonoo.adapter.output.persistence.DuckDbHandballRepository
 import de.noonoo.adapter.output.persistence.DuckDbNewsRepository
 import de.noonoo.adapter.output.persistence.DuckDbPubgRepository
 import de.noonoo.adapter.output.persistence.DuckDbRepository
 import de.noonoo.domain.port.input.FetchDataUseCase
+import de.noonoo.domain.port.input.FetchF1DataUseCase
 import de.noonoo.domain.port.input.FetchHandballDataUseCase
 import de.noonoo.domain.port.input.FetchNewsUseCase
 import de.noonoo.domain.port.input.FetchPubgDataUseCase
 import de.noonoo.domain.port.input.QueryDataUseCase
+import de.noonoo.domain.port.input.QueryF1DataUseCase
 import de.noonoo.domain.port.input.QueryPubgDataUseCase
+import de.noonoo.domain.port.output.F1ApiPort
+import de.noonoo.domain.port.output.F1Repository
 import de.noonoo.domain.port.output.FootballApiPort
 import de.noonoo.domain.port.output.HandballApiPort
 import de.noonoo.domain.port.output.HandballRepository
@@ -25,6 +31,8 @@ import de.noonoo.domain.port.output.NewsRepository
 import de.noonoo.domain.port.output.NotificationPort
 import de.noonoo.domain.port.output.PubgApiPort
 import de.noonoo.domain.port.output.PubgRepository
+import de.noonoo.domain.service.F1IngestionService
+import de.noonoo.domain.service.F1QueryService
 import de.noonoo.domain.service.HandballIngestionService
 import de.noonoo.domain.service.IngestionService
 import de.noonoo.domain.service.NewsIngestionService
@@ -107,6 +115,12 @@ val appModule = module {
     single<HandballRepository> { DuckDbHandballRepository(get()) }
     single<FetchHandballDataUseCase> { HandballIngestionService(get(), get()) }
 
+    // ── Adapter: F1 ───────────────────────────────────────────────────────────
+    single<F1ApiPort> { JolpicaF1Client(get()) }
+    single<F1Repository> { DuckDbF1Repository(get()) }
+    single<FetchF1DataUseCase> { F1IngestionService(get(), get()) }
+    single<QueryF1DataUseCase> { F1QueryService(get()) }
+
     // ── Adapter: Output ───────────────────────────────────────────────────────
     single<NotificationPort> { DiscordSender(get()) }
 
@@ -127,6 +141,9 @@ val appModule = module {
             fetchPubgUseCase = get(),
             queryPubgUseCase = get(),
             fetchHandballUseCase = get(),
+            fetchF1UseCase = get(),
+            queryF1UseCase = get(),
+            f1Repository = get(),
             newsRepository = get(),
             handballRepository = get(),
             notificationPort = get(),
