@@ -52,6 +52,9 @@ dependencies {
     // Jsoup (HTML-Parsing)
     implementation("org.jsoup:jsoup:1.22.1")
 
+    // Playwright (Fallback-Scraping für handball_statistics)
+    implementation("com.microsoft.playwright:playwright:1.48.0")
+
     // Anthropic Java SDK (optional, Phase 4)
     implementation("com.anthropic:anthropic-java:2.19.0")
 
