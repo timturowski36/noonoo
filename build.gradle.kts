@@ -43,8 +43,13 @@ dependencies {
     // Koin Dependency Injection
     implementation("io.insert-koin:koin-core:$koinVersion")
 
-    // Discord Webhooks
+    // Discord Webhooks (bestehende Ausgabe-Module)
     implementation("club.minnced:discord-webhooks:0.8.4")
+
+    // JDA – Discord Gateway für Command-Empfang (!analyse)
+    implementation("net.dv8tion:JDA:5.3.0") {
+        exclude(module = "opus-java")
+    }
 
     // dotenv (Secrets aus .env)
     implementation("io.github.cdimascio:dotenv-kotlin:6.5.1")
