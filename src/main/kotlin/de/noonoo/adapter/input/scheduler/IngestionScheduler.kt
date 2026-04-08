@@ -483,24 +483,89 @@ class IngestionScheduler(
             return
         }
         val now = LocalDateTime.now()
-        val limit = output.params?.get("limit")?.toIntOrNull() ?: 30
-
-        val scorerList = queryHandballStatisticsUseCase.getLatestScorerList(leagueId) ?: run {
-            log.warn { "[${module.id}] Keine Daten für Liga $leagueId in DB – Ausgabe übersprungen." }
-            return
-        }
 
         val message: String? = when (output.format) {
+
+            // ── Tabelle / Spielergebnisse via HandballRepository ──────────────
+            // Nutzt die vorhandenen handball_matches / handball_standings-Daten.
+
+            "handball_table" -> {
+                val leagueName = output.params?.get("leagueName") ?: ""
+                val standings = handballRepository.findStandingsByLeague(leagueId)
+                if (standings.isEmpty()) {
+                    log.warn { "[${module.id}] Keine Standings für Liga $leagueId – handball_table übersprungen." }
+                    return
+                }
+                HandballDiscordFormatter.formatHandballTable(standings, leagueName, now)
+            }
+
+            "handball_last_matches" -> {
+                val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
+                    log.warn { "[${module.id}] Kein Teamname für handball_last_matches angegeben." }
+                    return
+                }
+                val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
+                val matches = handballRepository.findMatchesByTeamName(teamName)
+                HandballDiscordFormatter.formatHandballLastMatches(matches, teamName, now, limit)
+            }
+
+            "handball_next_matches" -> {
+                val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
+                    log.warn { "[${module.id}] Kein Teamname für handball_next_matches angegeben." }
+                    return
+                }
+                val limit = output.params?.get("limit")?.toIntOrNull() ?: 5
+                val matches = handballRepository.findMatchesByTeamName(teamName)
+                HandballDiscordFormatter.formatHandballNextMatches(matches, teamName, now, limit)
+            }
+
+            // ── Scorer-Ausgaben via HandballStatisticsRepository ──────────────
+
             "handball_scorer_table" -> {
+                val limit = output.params?.get("limit")?.toIntOrNull() ?: 30
+                val scorerList = queryHandballStatisticsUseCase.getLatestScorerList(leagueId) ?: run {
+                    log.warn { "[${module.id}] Keine Scorer-Daten für Liga $leagueId." }
+                    return
+                }
                 HandballStatisticsDiscordFormatter.formatScorerTable(scorerList, now, limit)
             }
+
             "handball_scorer_team" -> {
                 val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
                     log.warn { "[${module.id}] Kein Teamname für handball_scorer_team angegeben." }
                     return
                 }
+                val scorerList = queryHandballStatisticsUseCase.getLatestScorerList(leagueId) ?: run {
+                    log.warn { "[${module.id}] Keine Scorer-Daten für Liga $leagueId." }
+                    return
+                }
                 HandballStatisticsDiscordFormatter.formatScorerTeam(scorerList, teamName, now)
             }
+
+            "handball_scorer_team_goals" -> {
+                val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
+                    log.warn { "[${module.id}] Kein Teamname für handball_scorer_team_goals angegeben." }
+                    return
+                }
+                val scorerList = queryHandballStatisticsUseCase.getLatestScorerList(leagueId) ?: run {
+                    log.warn { "[${module.id}] Keine Scorer-Daten für Liga $leagueId." }
+                    return
+                }
+                HandballStatisticsDiscordFormatter.formatScorerTeamGoals(scorerList, teamName, now)
+            }
+
+            "handball_scorer_team_penalties" -> {
+                val teamName = output.teams?.firstOrNull() ?: output.params?.get("teamName") ?: run {
+                    log.warn { "[${module.id}] Kein Teamname für handball_scorer_team_penalties angegeben." }
+                    return
+                }
+                val scorerList = queryHandballStatisticsUseCase.getLatestScorerList(leagueId) ?: run {
+                    log.warn { "[${module.id}] Keine Scorer-Daten für Liga $leagueId." }
+                    return
+                }
+                HandballStatisticsDiscordFormatter.formatScorerTeamPenalties(scorerList, teamName, now)
+            }
+
             else -> {
                 log.warn { "[${module.id}] Unbekanntes handball_statistics-Format: ${output.format}" }
                 null
