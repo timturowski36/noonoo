@@ -117,4 +117,105 @@ object HandballStatisticsDiscordFormatter {
             totalGoals, fieldGoals, smGoals, smAtt, smPct, warnings, twoMin, disq
         )
     }
+
+    // ── handball_scorer_team_goals ────────────────────────────────────────────
+    //
+    // Torschützenliste eines Teams:
+    //   #T = Rang im Team (nach Toren),  #G = Rang in der Liga insgesamt
+    //   Spieler ohne echten Namen werden als "N.N. N.N. {TrNr}" angezeigt.
+    //
+    // Beispiel:
+    //   🏅 **Torschützen HSG RE/OE** | Stand: 22.03.2026 09:21
+    //   ```
+    //   #T  #G  Name            Sp  Tore  7m
+    //   ──────────────────────────────────────
+    //    1   1  K. Polnik       16   125  19
+    //    2  27  M. Engberding   16    56  10
+    //   ```
+
+    fun formatScorerTeamGoals(
+        scorerList: HandballScorerList,
+        teamName: String,
+        now: LocalDateTime
+    ): String? {
+        val teamScorers = scorerList.scorers
+            .filter { it.teamName.equals(teamName, ignoreCase = true) }
+            .sortedByDescending { it.totalGoals }
+        if (teamScorers.isEmpty()) return null
+
+        val header = "🏅 **Torschützen $teamName** | Stand: ${now.format(NOW_FMT)}"
+        val colHeader = "#T  %2s  %-16s  Sp  Tore  7m".format("#G", "Name")
+        val sep = "─".repeat(38)
+
+        val rows = teamScorers.mapIndexed { idx, s ->
+            val teamRank   = (idx + 1).toString().padStart(2)
+            val leagueRank = s.position.toString().padStart(2)
+            val name       = abbreviateName(s.playerName, s.jerseyNumber).take(16).padEnd(16)
+            val sp         = s.gamesPlayed.toString().padStart(2)
+            val tore       = s.totalGoals.toString().padStart(4)
+            val sm         = s.sevenMeterGoals.toString().padStart(2)
+            "$teamRank  $leagueRank  $name  $sp  $tore  $sm"
+        }.joinToString("\n")
+
+        return "$header\n```\n$colHeader\n$sep\n$rows\n```"
+    }
+
+    // ── handball_scorer_team_penalties ────────────────────────────────────────
+    //
+    // 2-Minuten-Strafenliste eines Teams, sortiert nach 2-Min absteigend.
+    //
+    // Beispiel:
+    //   ⏱ **2-Minuten-Strafen HSG RE/OE** | Stand: 22.03.2026 09:21
+    //   ```
+    //    #  Name            Sp  2Min  Disq
+    //   ────────────────────────────────────
+    //    1  M. Engberding   16    12     0
+    //    2  D. Brunner      11     9     0
+    //   ```
+
+    fun formatScorerTeamPenalties(
+        scorerList: HandballScorerList,
+        teamName: String,
+        now: LocalDateTime
+    ): String? {
+        val teamScorers = scorerList.scorers
+            .filter { it.teamName.equals(teamName, ignoreCase = true) }
+            .sortedWith(compareByDescending<HandballScorer> { it.twoMinuteSuspensions }
+                .thenByDescending { it.disqualifications })
+        if (teamScorers.isEmpty()) return null
+
+        val header = "⏱ **2-Minuten-Strafen $teamName** | Stand: ${now.format(NOW_FMT)}"
+        val colHeader = " #  %-16s  Sp  2Min  Disq".format("Name")
+        val sep = "─".repeat(36)
+
+        val rows = teamScorers.mapIndexed { idx, s ->
+            val rank = (idx + 1).toString().padStart(2)
+            val name = abbreviateName(s.playerName, s.jerseyNumber).take(16).padEnd(16)
+            val sp   = s.gamesPlayed.toString().padStart(2)
+            val tmin = s.twoMinuteSuspensions.toString().padStart(4)
+            val disq = s.disqualifications.toString().padStart(4)
+            "$rank  $name  $sp  $tmin  $disq"
+        }.joinToString("\n")
+
+        return "$header\n```\n$colHeader\n$sep\n$rows\n```"
+    }
+
+    // ── Hilfsmethoden ─────────────────────────────────────────────────────────
+
+    /**
+     * Kürzt "Kevin Polnik" → "K. Polnik".
+     * Spieler ohne echten Namen → "N.N. N.N. {TrNr}".
+     */
+    private fun abbreviateName(playerName: String, jerseyNumber: Int?): String {
+        val clean = playerName.trim()
+        if (clean.isBlank() || clean.all { it.isDigit() }) {
+            return "N.N. N.N. ${jerseyNumber ?: "?"}"
+        }
+        val parts = clean.split(" ").filter { it.isNotBlank() }
+        if (parts.size <= 1) return clean
+        val first = parts.first()
+        // Bereits abgekürzt (z.B. "K.") oder sehr kurzer Vorname
+        if (first.length <= 2) return clean
+        return "${first[0]}. ${parts.last()}"
+    }
 }

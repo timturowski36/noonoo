@@ -334,18 +334,62 @@ modules:
     schedule:
       fetchIntervalMinutes: 60
     outputs:
-      # Komplette Torschützenliste — montags um 09:20
+      # Ligatabelle (aus handball_matches/standings) — montags um 09:19
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_19
+        format: handball_table
+        params:
+          leagueName: "Männer Bezirksliga Ruhrgebiet"
+
+      # Letzte Spiele eines Teams — montags um 09:20
       - type: discord
         channel: sport
         schedule: WEEKLY_MONDAY_09_20
+        format: handball_last_matches
+        teams:
+          - "HSG RE/OE"
+        params:
+          limit: "5"
+
+      # Nächste Spiele eines Teams — montags um 09:20 (verzögert)
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_20
+        format: handball_next_matches
+        teams:
+          - "HSG RE/OE"
+        params:
+          limit: "5"
+
+      # Torschützen-Liste des Teams (Rang Liga + Rang Team) — montags um 09:21
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_21
+        format: handball_scorer_team_goals
+        teams:
+          - "HSG RE/OE"
+
+      # 2-Minuten-Strafen des Teams — montags um 09:21 (verzögert)
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_21
+        format: handball_scorer_team_penalties
+        teams:
+          - "HSG RE/OE"
+
+      # Komplette Torschützenliste der Liga — montags um 09:22
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_22
         format: handball_scorer_table
         params:
           limit: "30"
 
-      # Torschützen eines bestimmten Teams — montags um 09:25
+      # Detailansicht Torschützen (Feld/7m/Quote) — montags um 09:22 (verzögert)
       - type: discord
         channel: sport
-        schedule: WEEKLY_MONDAY_09_25
+        schedule: WEEKLY_MONDAY_09_22
         format: handball_scorer_team
         teams:
           - "HSG RE/OE"
