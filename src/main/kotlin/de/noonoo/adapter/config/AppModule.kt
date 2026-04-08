@@ -1,5 +1,11 @@
 package de.noonoo.adapter.config
 
+import com.anthropic.client.okhttp.AnthropicOkHttpClient
+import de.noonoo.adapter.ai.ClaudeService
+import de.noonoo.adapter.ai.HandballAnalysisContextBuilder
+import de.noonoo.adapter.ai.HandballClaudeAnalyser
+import de.noonoo.adapter.ai.HandballLiveFetcher
+import de.noonoo.adapter.input.discord.AnalyseCommandListener
 import de.noonoo.adapter.input.scheduler.IngestionScheduler
 import de.noonoo.adapter.output.api.H4aStatisticsClient
 import de.noonoo.adapter.output.api.HandballApiClient
@@ -153,6 +159,13 @@ val appModule = module {
     single<FetchNewsUseCase> { NewsIngestionService(get(), get()) }
     single<FetchPubgDataUseCase> { PubgIngestionService(get(), get()) }
     single<QueryPubgDataUseCase> { PubgQueryService(get()) }
+
+    // ── KI-Analyse ────────────────────────────────────────────────────────────
+    single { ClaudeService(AnthropicOkHttpClient.fromEnv()) }
+    single { HandballLiveFetcher(get(), get(), get(), get(), get()) }
+    single { HandballAnalysisContextBuilder(get(), get()) }
+    single { HandballClaudeAnalyser(get()) }
+    single { AnalyseCommandListener(get(), get(), get()) }
 
     // ── Scheduler ─────────────────────────────────────────────────────────────
     single {
