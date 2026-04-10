@@ -80,12 +80,16 @@ val appModule = module {
     single<Map<String, String>> {
         val env = get<io.github.cdimascio.dotenv.Dotenv>()
         val config = get<AppConfig>()
-        config.outputs.discord.channels.mapValues { (_, value) ->
+        val channels = config.outputs.discord.channels.mapValues { (_, value) ->
             if (value.startsWith("\${") && value.endsWith("}")) {
                 val key = value.removeSurrounding("\${", "}")
                 env[key] ?: error("Umgebungsvariable '$key' nicht gesetzt.")
             } else value
-        }
+        }.toMutableMap()
+        // Test-Kanal für Debug-Modus: DISCORD_TEST_WEBHOOK aus .env, Fallback auf sport-Webhook
+        val testWebhook = env.get("DISCORD_TEST_WEBHOOK", channels["sport"] ?: "")
+        channels["test"] = testWebhook
+        channels
     }
 
     // ── HTTP Client ───────────────────────────────────────────────────────────
@@ -161,7 +165,11 @@ val appModule = module {
     single<QueryPubgDataUseCase> { PubgQueryService(get()) }
 
     // ── KI-Analyse ────────────────────────────────────────────────────────────
-    single { ClaudeService(AnthropicOkHttpClient.fromEnv()) }
+    single {
+        val env = get<io.github.cdimascio.dotenv.Dotenv>()
+        val apiKey = env["ANTHROPIC_API_KEY"]
+        ClaudeService(AnthropicOkHttpClient.builder().apiKey(apiKey).build())
+    }
     single { HandballLiveFetcher(get(), get(), get(), get(), get()) }
     single { HandballAnalysisContextBuilder(get(), get()) }
     single { HandballClaudeAnalyser(get()) }
@@ -169,8 +177,11 @@ val appModule = module {
 
     // ── Scheduler ─────────────────────────────────────────────────────────────
     single {
+        val env = get<io.github.cdimascio.dotenv.Dotenv>()
+        val debugMode = env.get("DEBUG_MODE", "false").trim().lowercase() == "true"
         IngestionScheduler(
             modules = get<AppConfig>().modules,
+            debugMode = debugMode,
             fetchUseCase = get(),
             queryUseCase = get(),
             fetchNewsUseCase = get(),

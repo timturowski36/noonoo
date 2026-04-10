@@ -5,7 +5,7 @@ modules:
     source: openligadb
     config:
       league: bl1
-      season: 2024
+      season: 2025
     schedule:
       fetchIntervalMinutes: 15
     outputs:
@@ -14,6 +14,7 @@ modules:
         channel: sport
         schedule: DAILY_18_00
         format: table_summary
+        onStartup: true
         params:
           leagueName: "1. Bundesliga"
 
@@ -132,19 +133,27 @@ modules:
 
   - id: pubg_friends
     type: pubg
-    enabled: false     # PUBG_API_KEY in .env setzen, Spielernamen eintragen und auf true ändern
+    enabled: true
     source: pubg_api
     config:
       platform: steam  # steam | xbox | psn
     players:
-      - "PlayerName1"
-      - "PlayerName2"
+      - "brotrustgaming"
+      - "philipnc"
+    accountIds:
+      - "account.af4b877b95df46a3804d38d8be1d3225"
     schedule:
       fetchIntervalMinutes: 30
     outputs:
       # Tagesstatistik – täglich um 09:00
       - type: discord
         channel: gaming
+        schedule: DAILY_09_00
+        format: pubg_daily_stats
+
+      # Tagesstatistik – allgemein-Kanal
+      - type: discord
+        channel: allgemein
         schedule: DAILY_09_00
         format: pubg_daily_stats
 
@@ -189,11 +198,11 @@ modules:
 
   - id: bundesliga_2
     type: football
-    enabled: false     # Deaktiviert – auf true setzen zum Aktivieren
+    enabled: true
     source: openligadb
     config:
       league: bl2
-      season: 2024
+      season: 2025
     schedule:
       fetchIntervalMinutes: 60
     outputs:
@@ -201,6 +210,42 @@ modules:
         channel: sport
         schedule: WEEKLY_MONDAY_09_00
         format: weekend_summary
+        params:
+          leagueName: "2. Bundesliga"
+
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_05
+        format: table_summary
+        params:
+          leagueName: "2. Bundesliga"
+
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_FRIDAY_12_00
+        format: team_next_matches
+        teams:
+          - "FC Schalke 04"
+        params:
+          limit: "3"
+          leagueName: "2. Bundesliga"
+
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_10
+        format: team_last_matches
+        teams:
+          - "FC Schalke 04"
+        params:
+          limit: "5"
+          leagueName: "2. Bundesliga"
+
+      - type: discord
+        channel: sport
+        schedule: WEEKLY_MONDAY_09_15
+        format: team_summary
+        teams:
+          - "FC Schalke 04"
         params:
           leagueName: "2. Bundesliga"
 
@@ -400,3 +445,4 @@ outputs:
       sport: ${DISCORD_SPORT_WEBHOOK}
       news: ${DISCORD_NEWS_WEBHOOK}
       gaming: ${DISCORD_GAMING_WEBHOOK}
+      allgemein: ${DISCORD_ALLGEMEIN_WEBHOOK}

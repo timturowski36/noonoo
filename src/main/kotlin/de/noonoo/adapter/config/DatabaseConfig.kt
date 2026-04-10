@@ -8,6 +8,9 @@ object DatabaseConfig {
 
     private const val DB_PATH = "data/feedkrake.duckdb"
 
+    /** Globaler Lock: DuckDB erlaubt keine parallelen Writes auf derselben Connection. */
+    val lock = Any()
+
     fun connect(): Connection {
         File("data").mkdirs()
         return DriverManager.getConnection("jdbc:duckdb:$DB_PATH")
@@ -30,8 +33,8 @@ object DatabaseConfig {
                     league        VARCHAR NOT NULL,
                     season        INTEGER NOT NULL,
                     matchday      INTEGER NOT NULL,
-                    home_team_id  INTEGER REFERENCES teams(id),
-                    away_team_id  INTEGER REFERENCES teams(id),
+                    home_team_id  INTEGER,
+                    away_team_id  INTEGER,
                     kickoff_at    TIMESTAMP,
                     home_score_ht INTEGER,
                     away_score_ht INTEGER,
@@ -45,7 +48,7 @@ object DatabaseConfig {
             stmt.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS goals (
                     id          INTEGER PRIMARY KEY,
-                    match_id    INTEGER REFERENCES matches(id),
+                    match_id    INTEGER,
                     scorer_name VARCHAR,
                     minute      INTEGER,
                     is_own_goal BOOLEAN NOT NULL DEFAULT false,
@@ -60,7 +63,7 @@ object DatabaseConfig {
                     league         VARCHAR NOT NULL,
                     season         INTEGER NOT NULL,
                     position       INTEGER NOT NULL,
-                    team_id        INTEGER REFERENCES teams(id),
+                    team_id        INTEGER,
                     played         INTEGER NOT NULL DEFAULT 0,
                     won            INTEGER NOT NULL DEFAULT 0,
                     draw           INTEGER NOT NULL DEFAULT 0,
@@ -161,7 +164,7 @@ object DatabaseConfig {
 
             // Migration für bestehende DBs ohne comment-Spalte
             stmt.executeUpdate(
-                "ALTER TABLE handball_matches ADD COLUMN IF NOT EXISTS comment VARCHAR NOT NULL DEFAULT ''"
+                "ALTER TABLE handball_matches ADD COLUMN IF NOT EXISTS comment VARCHAR DEFAULT ''"
             )
 
             stmt.executeUpdate("""

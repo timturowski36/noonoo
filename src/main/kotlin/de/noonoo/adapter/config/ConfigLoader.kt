@@ -8,7 +8,8 @@ import java.io.File
 @Serializable
 data class AppConfig(
     val modules: List<ModuleConfig>,
-    val outputs: OutputsConfig
+    val outputs: OutputsConfig,
+    val debug: Boolean = false
 )
 
 @Serializable
@@ -20,7 +21,8 @@ data class ModuleConfig(
     val config: Map<String, String>,
     val schedule: ScheduleConfig,
     val outputs: List<OutputConfig>,
-    val players: List<String>? = null
+    val players: List<String>? = null,
+    val accountIds: List<String>? = null
 )
 
 @Serializable
@@ -35,7 +37,8 @@ data class OutputConfig(
     val schedule: String,
     val format: String,
     val params: Map<String, String>? = null,  // limit, leagueName, teamId (einzeln)
-    val teams: List<String>? = null            // Teamnamen → per DB-Lookup aufgelöst
+    val teams: List<String>? = null,           // Teamnamen → per DB-Lookup aufgelöst
+    val onStartup: Boolean = false             // einmalig beim Start senden (für Tests)
 )
 
 @Serializable

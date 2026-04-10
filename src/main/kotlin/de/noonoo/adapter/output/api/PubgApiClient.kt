@@ -6,11 +6,13 @@ import de.noonoo.domain.model.PubgPlayer
 import de.noonoo.domain.model.PubgSeasonStats
 import de.noonoo.domain.port.output.PubgApiPort
 import io.ktor.client.*
-import io.ktor.client.call.*
+import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.double
@@ -20,12 +22,21 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
+private val log = KotlinLogging.logger {}
+
+// Eigener HTTP-Client ohne ContentNegotiation: Ktor's ContentNegotiation hängt "; application/json"
+// an den Accept-Header, was die PUBG-API (CloudFront) mit 415 ablehnt.
+private val pubgHttpClient = HttpClient(CIO)
+
+private val pubgJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
 class PubgApiClient(
-    private val httpClient: HttpClient,
+    @Suppress("UNUSED_PARAMETER") sharedHttpClient: HttpClient,
     private val apiKey: String
 ) : PubgApiPort {
 
@@ -37,19 +48,46 @@ class PubgApiClient(
     }
 
     override suspend fun fetchPlayersByName(names: List<String>, platform: String): List<PubgPlayer> {
-        val namesCsv = names.joinToString(",")
-        val response: PlayersResponse = httpClient.get("$baseUrl/shards/$platform/players") {
-            pubgHeaders()
-            parameter("filter[playerNames]", namesCsv)
-        }.body()
-        return response.data.map { it.toDomain() }
+        return try {
+            val namesCsv = names.joinToString(",")
+            // Percent-encode brackets; use dedicated client without ContentNegotiation
+            val url = "$baseUrl/shards/$platform/players?filter%5BplayerNames%5D=$namesCsv"
+            val httpResponse = pubgHttpClient.get(url) { pubgHeaders() }
+            val body = httpResponse.bodyAsText()
+            if (!httpResponse.status.isSuccess()) {
+                log.warn { "[PUBG] fetchPlayersByName HTTP ${httpResponse.status.value}: ${body.take(200)}" }
+                return emptyList()
+            }
+            pubgJson.decodeFromString<PlayersResponse>(body).data.map { it.toDomain() }
+        } catch (e: Exception) {
+            log.warn { "[PUBG] fetchPlayersByName fehlgeschlagen: ${e.message}" }
+            emptyList()
+        }
+    }
+
+    override suspend fun fetchPlayerById(accountId: String, platform: String): PubgPlayer? {
+        return try {
+            val url = "$baseUrl/shards/$platform/players?filter%5BplayerIds%5D=$accountId"
+            val httpResponse = pubgHttpClient.get(url) { pubgHeaders() }
+            val body = httpResponse.bodyAsText()
+            if (!httpResponse.status.isSuccess()) {
+                log.warn { "[PUBG] fetchPlayerById HTTP ${httpResponse.status.value}: ${body.take(200)}" }
+                return null
+            }
+            pubgJson.decodeFromString<PlayersResponse>(body).data.firstOrNull()?.toDomain()
+        } catch (e: Exception) {
+            log.warn { "[PUBG] fetchPlayerById ($accountId) fehlgeschlagen: ${e.message}" }
+            null
+        }
     }
 
     override suspend fun fetchMatchDetails(matchId: String, platform: String): Pair<PubgMatch, List<PubgMatchParticipant>>? {
         return try {
-            val response: JsonObject = httpClient.get("$baseUrl/shards/$platform/matches/$matchId") {
+            val httpResponse = pubgHttpClient.get("$baseUrl/shards/$platform/matches/$matchId") {
                 header(HttpHeaders.Accept, "application/vnd.api+json")
-            }.body()
+            }
+            if (!httpResponse.status.isSuccess()) return null
+            val response = pubgJson.decodeFromString<JsonObject>(httpResponse.bodyAsText())
             parseMatchResponse(matchId, response)
         } catch (e: Exception) {
             null
@@ -58,12 +96,11 @@ class PubgApiClient(
 
     override suspend fun fetchLifetimeStats(accountId: String, platform: String): List<PubgSeasonStats> {
         return try {
-            val response: LifetimeStatsResponse = httpClient.get(
+            val httpResponse = pubgHttpClient.get(
                 "$baseUrl/shards/$platform/players/$accountId/seasons/lifetime"
-            ) {
-                pubgHeaders()
-            }.body()
-            response.toSeasonStats(accountId, platform)
+            ) { pubgHeaders() }
+            if (!httpResponse.status.isSuccess()) return emptyList()
+            pubgJson.decodeFromString<LifetimeStatsResponse>(httpResponse.bodyAsText()).toSeasonStats(accountId, platform)
         } catch (e: Exception) {
             emptyList()
         }
@@ -129,6 +166,11 @@ class PubgApiClient(
     }
 
     // ── Players Response DTOs ─────────────────────────────────────────────────────
+
+    @Serializable
+    private data class SinglePlayerResponse(
+        val data: PlayerData
+    )
 
     @Serializable
     private data class PlayersResponse(

@@ -34,6 +34,7 @@ private val log = KotlinLogging.logger {}
 
 class IngestionScheduler(
     private val modules: List<ModuleConfig>,
+    private val debugMode: Boolean,
     private val fetchUseCase: FetchDataUseCase,
     private val queryUseCase: QueryDataUseCase,
     private val fetchNewsUseCase: FetchNewsUseCase,
@@ -119,8 +120,10 @@ class IngestionScheduler(
             log.warn { "[${module.id}] Kein 'platform' in module.config – Ingestion übersprungen." }
             return
         }
-        val players = module.players ?: run {
-            log.warn { "[${module.id}] Keine 'players' definiert – Ingestion übersprungen." }
+        val players = module.players ?: emptyList()
+        val accountIds = module.accountIds ?: emptyList()
+        if (players.isEmpty() && accountIds.isEmpty()) {
+            log.warn { "[${module.id}] Weder 'players' noch 'accountIds' definiert – Ingestion übersprungen." }
             return
         }
         val intervalMs = module.schedule.fetchIntervalMinutes * 60_000L
@@ -128,8 +131,9 @@ class IngestionScheduler(
         scope.launch {
             while (isActive) {
                 try {
-                    log.info { "[${module.id}] Starte PUBG-Abruf ($platform, ${players.size} Spieler)..." }
-                    fetchPubgUseCase.fetchAndStore(players, platform)
+                    val total = players.size + accountIds.size
+                    log.info { "[${module.id}] Starte PUBG-Abruf ($platform, $total Spieler)..." }
+                    fetchPubgUseCase.fetchAndStore(players, platform, accountIds)
                     log.info { "[${module.id}] PUBG-Abruf abgeschlossen." }
                 } catch (e: Exception) {
                     log.error(e) { "[${module.id}] Fehler beim PUBG-Abruf: ${e.message}" }
@@ -226,22 +230,63 @@ class IngestionScheduler(
 
     private fun startOutputSchedules(module: ModuleConfig) {
         module.outputs.forEach { output ->
-            scope.launch {
-                while (isActive) {
-                    val delayMs = millisUntilNext(output.schedule)
-                    log.info { "[${module.id}] Nächste Ausgabe '${output.format}' in ${delayMs / 60_000}min." }
+            if (debugMode) {
+                // Debug-Modus: alle Outputs sofort (nach kurzem Ingestion-Delay) an "test"-Kanal
+                scope.launch {
+                    val delayMs = 30_000L
+                    log.info { "[${module.id}][DEBUG] Ausgabe '${output.format}' → #test in ${delayMs / 1000}s." }
                     delay(delayMs)
+                    val debugOutput = output.copy(channel = "test")
                     try {
                         when (module.type) {
-                            "football"            -> sendFootballOutput(module, output)
-                            "news"                -> sendNewsOutput(module, output)
-                            "pubg"                -> sendPubgOutput(module, output)
-                            "handball"            -> sendHandballOutput(module, output)
-                            "handball_statistics" -> sendHandballStatisticsOutput(module, output)
-                            "formula1"            -> sendF1Output(module, output)
+                            "football"            -> sendFootballOutput(module, debugOutput)
+                            "news"                -> sendNewsOutput(module, debugOutput)
+                            "pubg"                -> sendPubgOutput(module, debugOutput)
+                            "handball"            -> sendHandballOutput(module, debugOutput)
+                            "handball_statistics" -> sendHandballStatisticsOutput(module, debugOutput)
+                            "formula1"            -> sendF1Output(module, debugOutput)
                         }
                     } catch (e: Exception) {
-                        log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }
+                        log.error(e) { "[${module.id}][DEBUG] Fehler bei '${output.format}': ${e.message}" }
+                    }
+                }
+            } else {
+                if (output.onStartup) {
+                    scope.launch {
+                        val startupDelayMs = 90_000L
+                        log.info { "[${module.id}] onStartup-Ausgabe '${output.format}' in ${startupDelayMs / 1000}s." }
+                        delay(startupDelayMs)
+                        try {
+                            when (module.type) {
+                                "football"            -> sendFootballOutput(module, output)
+                                "news"                -> sendNewsOutput(module, output)
+                                "pubg"                -> sendPubgOutput(module, output)
+                                "handball"            -> sendHandballOutput(module, output)
+                                "handball_statistics" -> sendHandballStatisticsOutput(module, output)
+                                "formula1"            -> sendF1Output(module, output)
+                            }
+                        } catch (e: Exception) {
+                            log.error(e) { "[${module.id}] Fehler bei onStartup-Ausgabe '${output.format}': ${e.message}" }
+                        }
+                    }
+                }
+                scope.launch {
+                    while (isActive) {
+                        val delayMs = millisUntilNext(output.schedule)
+                        log.info { "[${module.id}] Nächste Ausgabe '${output.format}' in ${delayMs / 60_000}min." }
+                        delay(delayMs)
+                        try {
+                            when (module.type) {
+                                "football"            -> sendFootballOutput(module, output)
+                                "news"                -> sendNewsOutput(module, output)
+                                "pubg"                -> sendPubgOutput(module, output)
+                                "handball"            -> sendHandballOutput(module, output)
+                                "handball_statistics" -> sendHandballStatisticsOutput(module, output)
+                                "formula1"            -> sendF1Output(module, output)
+                            }
+                        } catch (e: Exception) {
+                            log.error(e) { "[${module.id}] Fehler bei Ausgabe '${output.format}': ${e.message}" }
+                        }
                     }
                 }
             }

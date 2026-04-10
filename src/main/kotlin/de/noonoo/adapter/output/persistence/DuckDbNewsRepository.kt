@@ -1,5 +1,6 @@
 package de.noonoo.adapter.output.persistence
 
+import de.noonoo.adapter.config.DatabaseConfig
 import de.noonoo.domain.model.NewsArticle
 import de.noonoo.domain.port.output.NewsRepository
 import java.sql.Connection
@@ -10,21 +11,23 @@ class DuckDbNewsRepository(
 ) : NewsRepository {
 
     override fun saveArticles(articles: List<NewsArticle>) {
-        if (articles.isEmpty()) return
-        val sql = """
-            INSERT OR IGNORE INTO articles (url, source, title, published_at, fetched_at)
-            VALUES (?, ?, ?, ?, ?)
-        """.trimIndent()
-        connection.prepareStatement(sql).use { stmt ->
-            articles.forEach { a ->
-                stmt.setString(1, a.url)
-                stmt.setString(2, a.source)
-                stmt.setString(3, a.title)
-                stmt.setObject(4, a.publishedAt?.let { Timestamp.valueOf(it) })
-                stmt.setTimestamp(5, Timestamp.valueOf(a.fetchedAt))
-                stmt.addBatch()
+        synchronized(DatabaseConfig.lock) {
+            if (articles.isEmpty()) return@synchronized
+            val sql = """
+                INSERT OR IGNORE INTO articles (url, source, title, published_at, fetched_at)
+                VALUES (?, ?, ?, ?, ?)
+            """.trimIndent()
+            connection.prepareStatement(sql).use { stmt ->
+                articles.forEach { a ->
+                    stmt.setString(1, a.url)
+                    stmt.setString(2, a.source)
+                    stmt.setString(3, a.title)
+                    stmt.setObject(4, a.publishedAt?.let { Timestamp.valueOf(it) })
+                    stmt.setTimestamp(5, Timestamp.valueOf(a.fetchedAt))
+                    stmt.addBatch()
+                }
+                stmt.executeBatch()
             }
-            stmt.executeBatch()
         }
     }
 

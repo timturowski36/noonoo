@@ -58,23 +58,23 @@ class OpenLigaDbClient(
 
     @Serializable
     private data class ApiTeam(
-        @SerialName("TeamId") val id: Int,
-        @SerialName("TeamName") val name: String,
-        @SerialName("ShortName") val shortName: String = "",
-        @SerialName("TeamIconUrl") val iconUrl: String = ""
+        @SerialName("teamId") val id: Int,
+        @SerialName("teamName") val name: String,
+        @SerialName("shortName") val shortName: String = "",
+        @SerialName("teamIconUrl") val iconUrl: String = ""
     ) {
         fun toDomain() = Team(id = id, name = name, shortName = shortName, iconUrl = iconUrl)
     }
 
     @Serializable
     private data class ApiGoal(
-        @SerialName("GoalID") val id: Int,
-        @SerialName("ScoreTeam1") val scoreHome: Int,
-        @SerialName("ScoreTeam2") val scoreAway: Int,
-        @SerialName("MatchMinute") val minute: Int? = null,
-        @SerialName("GoalGetterName") val scorerName: String = "",
-        @SerialName("IsOwnGoal") val isOwnGoal: Boolean = false,
-        @SerialName("IsPenalty") val isPenalty: Boolean = false
+        @SerialName("goalID") val id: Int,
+        @SerialName("scoreTeam1") val scoreHome: Int,
+        @SerialName("scoreTeam2") val scoreAway: Int,
+        @SerialName("matchMinute") val minute: Int? = null,
+        @SerialName("goalGetterName") val scorerName: String = "",
+        @SerialName("isOwnGoal") val isOwnGoal: Boolean = false,
+        @SerialName("isPenalty") val isPenalty: Boolean = false
     ) {
         fun toDomain(matchId: Int) = Goal(
             id = id,
@@ -90,16 +90,16 @@ class OpenLigaDbClient(
 
     @Serializable
     private data class ApiMatch(
-        @SerialName("MatchID") val id: Int,
-        @SerialName("LeagueShortcut") val league: String,
-        @SerialName("LeagueSeason") val season: Int,
-        @SerialName("MatchDateTimeUTC") val kickoffAt: String,
-        @SerialName("Group") val group: ApiGroup? = null,
-        @SerialName("Team1") val homeTeam: ApiTeam,
-        @SerialName("Team2") val awayTeam: ApiTeam,
-        @SerialName("MatchIsFinished") val isFinished: Boolean,
-        @SerialName("MatchResults") val results: List<ApiResult> = emptyList(),
-        @SerialName("Goals") val goals: List<ApiGoal> = emptyList()
+        @SerialName("matchID") val id: Int,
+        @SerialName("leagueShortcut") val league: String,
+        @SerialName("leagueSeason") val season: Int,
+        @SerialName("matchDateTimeUTC") val kickoffAt: String,
+        @SerialName("group") val group: ApiGroup? = null,
+        @SerialName("team1") val homeTeam: ApiTeam,
+        @SerialName("team2") val awayTeam: ApiTeam,
+        @SerialName("matchIsFinished") val isFinished: Boolean,
+        @SerialName("matchResults") val results: List<ApiResult> = emptyList(),
+        @SerialName("goals") val goals: List<ApiGoal> = emptyList()
     ) {
         fun toDomain(): Match {
             val ht = results.firstOrNull { it.resultTypeId == 1 }
@@ -125,36 +125,36 @@ class OpenLigaDbClient(
 
     @Serializable
     private data class ApiGroup(
-        @SerialName("GroupOrderID") val groupOrderId: Int,
-        @SerialName("GroupName") val groupName: String = ""
+        @SerialName("groupOrderID") val groupOrderId: Int,
+        @SerialName("groupName") val groupName: String = ""
     )
 
     @Serializable
     private data class ApiResult(
-        @SerialName("ResultTypeID") val resultTypeId: Int,
-        @SerialName("PointsTeam1") val pointsTeam1: Int,
-        @SerialName("PointsTeam2") val pointsTeam2: Int
+        @SerialName("resultTypeID") val resultTypeId: Int,
+        @SerialName("pointsTeam1") val pointsTeam1: Int,
+        @SerialName("pointsTeam2") val pointsTeam2: Int
     )
 
     @Serializable
     private data class ApiGoalGetter(
-        @SerialName("GoalGetterName") val name: String = "",
-        @SerialName("GoalCount") val goals: Int = 0,
-        @SerialName("GoalGetterTeamID") val teamId: Int = 0
+        @SerialName("goalGetterName") val name: String = "",
+        @SerialName("goalCount") val goals: Int = 0,
+        val teamId: Int = 0  // nicht mehr in API-Antwort – standardmäßig 0
     ) {
         fun toDomain() = GoalGetter(name = name, teamId = teamId, goals = goals)
     }
 
     @Serializable
     private data class ApiStanding(
-        @SerialName("TeamInfoId") val teamId: Int,
-        @SerialName("Points") val points: Int,
-        @SerialName("Won") val won: Int,
-        @SerialName("Lost") val lost: Int,
-        @SerialName("Draw") val draw: Int,
-        @SerialName("Goals") val goalsFor: Int,
-        @SerialName("OpponentGoals") val goalsAgainst: Int,
-        @SerialName("Matches") val played: Int
+        @SerialName("teamInfoId") val teamId: Int,
+        @SerialName("points") val points: Int,
+        @SerialName("won") val won: Int,
+        @SerialName("lost") val lost: Int,
+        @SerialName("draw") val draw: Int,
+        @SerialName("goals") val goalsFor: Int,
+        @SerialName("opponentGoals") val goalsAgainst: Int,
+        @SerialName("matches") val played: Int
     ) {
         fun toDomain(league: String, season: Int, position: Int) = Standing(
             league = league,

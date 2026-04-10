@@ -1,5 +1,6 @@
 package de.noonoo.adapter.output.persistence
 
+import de.noonoo.adapter.config.DatabaseConfig
 import de.noonoo.domain.model.Goal
 import de.noonoo.domain.model.Match
 import de.noonoo.domain.model.Standing
@@ -14,50 +15,54 @@ class DuckDbRepository(
 ) : MatchRepository {
 
     override fun saveTeams(teams: List<Team>) {
-        val sql = """
-            INSERT OR REPLACE INTO teams (id, name, short_name, icon_url)
-            VALUES (?, ?, ?, ?)
-        """.trimIndent()
-        connection.prepareStatement(sql).use { stmt ->
-            teams.forEach { team ->
-                stmt.setInt(1, team.id)
-                stmt.setString(2, team.name)
-                stmt.setString(3, team.shortName)
-                stmt.setString(4, team.iconUrl)
-                stmt.addBatch()
+        synchronized(DatabaseConfig.lock) {
+            val sql = """
+                INSERT OR REPLACE INTO teams (id, name, short_name, icon_url)
+                VALUES (?, ?, ?, ?)
+            """.trimIndent()
+            connection.prepareStatement(sql).use { stmt ->
+                teams.forEach { team ->
+                    stmt.setInt(1, team.id)
+                    stmt.setString(2, team.name)
+                    stmt.setString(3, team.shortName)
+                    stmt.setString(4, team.iconUrl)
+                    stmt.addBatch()
+                }
+                stmt.executeBatch()
             }
-            stmt.executeBatch()
         }
     }
 
     override fun saveMatches(matches: List<Match>) {
-        val matchSql = """
-            INSERT OR REPLACE INTO matches
-                (id, league, season, matchday, home_team_id, away_team_id,
-                 kickoff_at, home_score_ht, away_score_ht, home_score_ft, away_score_ft,
-                 is_finished, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """.trimIndent()
-        connection.prepareStatement(matchSql).use { stmt ->
-            matches.forEach { m ->
-                stmt.setInt(1, m.id)
-                stmt.setString(2, m.league)
-                stmt.setInt(3, m.season)
-                stmt.setInt(4, m.matchday)
-                stmt.setInt(5, m.homeTeamId)
-                stmt.setInt(6, m.awayTeamId)
-                stmt.setTimestamp(7, Timestamp.valueOf(m.kickoffAt))
-                stmt.setObject(8, m.homeScoreHt)
-                stmt.setObject(9, m.awayScoreHt)
-                stmt.setObject(10, m.homeScoreFt)
-                stmt.setObject(11, m.awayScoreFt)
-                stmt.setBoolean(12, m.isFinished)
-                stmt.setTimestamp(13, Timestamp.valueOf(m.fetchedAt))
-                stmt.addBatch()
+        synchronized(DatabaseConfig.lock) {
+            val matchSql = """
+                INSERT OR REPLACE INTO matches
+                    (id, league, season, matchday, home_team_id, away_team_id,
+                     kickoff_at, home_score_ht, away_score_ht, home_score_ft, away_score_ft,
+                     is_finished, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            connection.prepareStatement(matchSql).use { stmt ->
+                matches.forEach { m ->
+                    stmt.setInt(1, m.id)
+                    stmt.setString(2, m.league)
+                    stmt.setInt(3, m.season)
+                    stmt.setInt(4, m.matchday)
+                    stmt.setInt(5, m.homeTeamId)
+                    stmt.setInt(6, m.awayTeamId)
+                    stmt.setTimestamp(7, Timestamp.valueOf(m.kickoffAt))
+                    stmt.setObject(8, m.homeScoreHt)
+                    stmt.setObject(9, m.awayScoreHt)
+                    stmt.setObject(10, m.homeScoreFt)
+                    stmt.setObject(11, m.awayScoreFt)
+                    stmt.setBoolean(12, m.isFinished)
+                    stmt.setTimestamp(13, Timestamp.valueOf(m.fetchedAt))
+                    stmt.addBatch()
+                }
+                stmt.executeBatch()
             }
-            stmt.executeBatch()
+            matches.forEach { saveGoals(it.id, it.goals) }
         }
-        matches.forEach { saveGoals(it.id, it.goals) }
     }
 
     private fun saveGoals(matchId: Int, goals: List<Goal>) {
@@ -84,29 +89,31 @@ class DuckDbRepository(
     }
 
     override fun saveStandings(standings: List<Standing>) {
-        val sql = """
-            INSERT OR REPLACE INTO standings
-                (league, season, position, team_id, played, won, draw, lost,
-                 goals_for, goals_against, points, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """.trimIndent()
-        connection.prepareStatement(sql).use { stmt ->
-            standings.forEach { s ->
-                stmt.setString(1, s.league)
-                stmt.setInt(2, s.season)
-                stmt.setInt(3, s.position)
-                stmt.setInt(4, s.teamId)
-                stmt.setInt(5, s.played)
-                stmt.setInt(6, s.won)
-                stmt.setInt(7, s.draw)
-                stmt.setInt(8, s.lost)
-                stmt.setInt(9, s.goalsFor)
-                stmt.setInt(10, s.goalsAgainst)
-                stmt.setInt(11, s.points)
-                stmt.setTimestamp(12, Timestamp.valueOf(s.fetchedAt))
-                stmt.addBatch()
+        synchronized(DatabaseConfig.lock) {
+            val sql = """
+                INSERT OR REPLACE INTO standings
+                    (league, season, position, team_id, played, won, draw, lost,
+                     goals_for, goals_against, points, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            connection.prepareStatement(sql).use { stmt ->
+                standings.forEach { s ->
+                    stmt.setString(1, s.league)
+                    stmt.setInt(2, s.season)
+                    stmt.setInt(3, s.position)
+                    stmt.setInt(4, s.teamId)
+                    stmt.setInt(5, s.played)
+                    stmt.setInt(6, s.won)
+                    stmt.setInt(7, s.draw)
+                    stmt.setInt(8, s.lost)
+                    stmt.setInt(9, s.goalsFor)
+                    stmt.setInt(10, s.goalsAgainst)
+                    stmt.setInt(11, s.points)
+                    stmt.setTimestamp(12, Timestamp.valueOf(s.fetchedAt))
+                    stmt.addBatch()
+                }
+                stmt.executeBatch()
             }
-            stmt.executeBatch()
         }
     }
 
