@@ -8,7 +8,7 @@ group = "de.noonoo"
 version = "1.0.0"
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
 }
 
 application {
